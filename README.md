@@ -7,7 +7,7 @@ An alternative Project window for the Unity Editor (Unity 6000.2+).
 Unity Package Manager → **+** → **Add package from git URL...** and paste:
 
 ```
-https://github.com/<user>/BetterProject.git?path=Packages/com.emeraldpowder.betterproject
+https://github.com/Glavak/BetterProject.git?path=Packages/com.emeraldpowder.betterproject
 ```
 
 A specific version: append `#v0.1.0` (a git tag) to the URL.
@@ -15,7 +15,7 @@ A specific version: append `#v0.1.0` (a git tag) to the URL.
 Or add to `Packages/manifest.json`:
 
 ```json
-"com.emeraldpowder.betterproject": "https://github.com/<user>/BetterProject.git?path=Packages/com.emeraldpowder.betterproject"
+"com.emeraldpowder.betterproject": "https://github.com/Glavak/BetterProject.git?path=Packages/com.emeraldpowder.betterproject"
 ```
 
 ## Repository layout
