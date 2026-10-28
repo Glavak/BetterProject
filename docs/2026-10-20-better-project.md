@@ -20,7 +20,7 @@ All Unity-internal reflection lives in one class, `UnityInternals`.
 ## Global Constraints
 
 - Everything lives under `Assets/BetterProject/`. Nothing outside it references it; it references no project code (`VectorTerrain` etc.).
-- `Assets/BetterProject/package.json`: `"name": "com.hypercell.betterproject"`, `"displayName": "Better Project"`, `"unity": "6000.2"`.
+- `Assets/BetterProject/package.json`: `"name": "com.emeraldpowder.betterproject"`, `"displayName": "Better Project"`, `"unity": "6000.2"`.
 - Namespaces: `BetterProject.Core`, `BetterProject.Editor`. Editor asmdef is Editor platform only.
 - Menu item: `Window/General/Better Project`. Multiple window instances allowed.
 - Favourites file: `ProjectSettings/BetterProjectFavourites.json` (committed). Recents file: `UserSettings/BetterProjectRecents.json` (not committed).

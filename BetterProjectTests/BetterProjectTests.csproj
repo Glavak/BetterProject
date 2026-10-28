@@ -12,8 +12,8 @@
 
   <ItemGroup>
     <!-- Compile Core and test sources directly: same code Unity compiles, no Unity needed. -->
-    <Compile Include="../Packages/com.hypercell.betterproject/Core/**/*.cs" LinkBase="Core" />
-    <Compile Include="../Packages/com.hypercell.betterproject/Tests/Editor/**/*.cs" LinkBase="Tests" />
+    <Compile Include="../Packages/com.emeraldpowder.betterproject/Core/**/*.cs" LinkBase="Core" />
+    <Compile Include="../Packages/com.emeraldpowder.betterproject/Tests/Editor/**/*.cs" LinkBase="Tests" />
   </ItemGroup>
 
   <ItemGroup>

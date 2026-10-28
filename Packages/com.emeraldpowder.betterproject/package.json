@@ -1,11 +1,11 @@
 {
-  "name": "com.hypercell.betterproject",
+  "name": "com.emeraldpowder.betterproject",
   "displayName": "Better Project",
   "version": "0.1.0",
   "unity": "6000.2",
   "description": "An alternative Project window for the Unity Editor.",
   "author": {
-    "name": "Denis Mustakimov"
+    "name": "Glavak"
   },
   "keywords": [
     "editor",

@@ -57,7 +57,7 @@ Mine (builder may revisit, flag if changed):
 
 ```
 Assets/BetterProject/
-  package.json                     name "com.hypercell.betterproject" (my call), displayName "Better Project"
+  package.json                     name "com.emeraldpowder.betterproject" (my call), displayName "Better Project"
   Editor/
     BetterProject.Editor.asmdef    Editor platform only, root namespace BetterProject
     ...
