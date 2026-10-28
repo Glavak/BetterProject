@@ -1,5 +1,11 @@
 {
   "dependencies": {
+    "com.emeraldpowder.betterproject": {
+      "version": "file:com.emeraldpowder.betterproject",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
     "com.unity.2d.animation": {
       "version": "12.0.3",
       "depth": 0,

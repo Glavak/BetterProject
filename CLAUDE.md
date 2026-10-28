@@ -18,8 +18,6 @@ package from this git repo. Unity 6000.2+ (dev project on 6000.2.15f1).
   - `Tests/Editor/` — NUnit tests for Core (`BetterProject.Core.Tests`, `UNITY_INCLUDE_TESTS`).
 - `BetterProjectTests/` — dotnet project that compiles `Core/` + `Tests/Editor/` directly, so Core tests run without Unity.
 - `Assets/`, `ProjectSettings/` — throwaway dev project, not part of the package.
-- `docs/` — GDD, design spec, implementation plan. Written when the plugin lived in `Assets/BetterProject` of another
-  project; paths there are historical. Design decisions and anti-goals in the spec still apply.
 
 ## Commands
 
@@ -45,11 +43,3 @@ in Unity's Test Runner (package is listed in `testables` in `Packages/manifest.j
 - Performance matters: must not be noticeably slower than the default Project window on thousands of assets. Don't
   load assets to build lists.
 
-## Releasing
-
-1. Bump `version` in `Packages/com.emeraldpowder.betterproject/package.json`, add a `CHANGELOG.md` entry.
-2. Commit, tag `vX.Y.Z`, push with tags. Users pin a version with `#vX.Y.Z` at the end of the git URL.
-
-## Commits
-
-Subject style: `Better Project: <what changed>`.
