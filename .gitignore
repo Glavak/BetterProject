@@ -1,0 +1,40 @@
+# Unity
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.unityproj
+*.apk
+*.aab
+*.unitypackage
+.vs/
+.idea/
+.vscode/
+.DS_Store
+crashlytics-buildid.txt
+sysinfo.txt
+
+# Better Project per-project data
+/ProjectSettings/BetterProjectFavourites.json
+/ProjectSettings/BetterProjectSettings.asset
+
+# dotnet test project
+BetterProjectTests/bin/
+BetterProjectTests/obj/
+!BetterProjectTests/BetterProjectTests.csproj

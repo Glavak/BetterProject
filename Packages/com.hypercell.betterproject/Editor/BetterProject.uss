@@ -1,0 +1,12 @@
+/* "Highlight under mouse" off: rows inside a panel with this class get a transparent hover colour.
+   ListView / TreeView rows (and the Favourites / Recents rows, which share their classes) draw hover with this
+   theme variable; overriding it on the panel affects only that panel. */
+.bp-no-hover {
+    --unity-colors-highlight-background-hover: rgba(0, 0, 0, 0);
+}
+
+/* Icon view: each tile highlights under the mouse (the row's own hover is cleared in code). Uses the same theme
+   variable as rows, so "Highlight under mouse / Right Panel" off (.bp-no-hover) turns it off too. */
+.bp-grid-cell:hover {
+    background-color: var(--unity-colors-highlight-background-hover);
+}
