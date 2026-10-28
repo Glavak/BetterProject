@@ -30,6 +30,7 @@ namespace BetterProject.Editor
         int _nextPlaceholder = -1;
         bool _busy;
         bool _showPackages = BetterProjectSettings.instance.ShowPackages;
+        float _rootSpacing = Theme.SectionSpacing; // gap above the Packages root
         readonly List<string> _selectedPaths = new List<string>(); // tree selection, kept across rebuilds
 
         /// <summary>
@@ -44,17 +45,26 @@ namespace BetterProject.Editor
             _expanded = new HashSet<string>(expandedFolders);
             _expanded.Add(AssetsRoot);
 
-            style.flexGrow = 1;
+            style.flexShrink = 0;
             _tree = new TreeView
             {
-                fixedItemHeight = Theme.RowHeight,
+                // Dynamic: the Packages row is taller by the gap above it, and clicks must map to rows by their real
+                // heights (fixed height maps y / RowHeight and would hit the row below).
+                virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight,
                 selectionType = SelectionType.Multiple, // Ctrl/Cmd and Shift click, like Unity's Project window
                 makeItem = MakeRow,
                 bindItem = BindRow,
             };
-            _tree.style.flexGrow = 1;
-            var scroller = _tree.Q<ScrollView>()?.verticalScroller;
-            if (scroller != null) scroller.valueChanged += _ => FullNameOverlay.Hide();
+            // The tree is as tall as its rows and never scrolls itself: the whole left panel (sections + tree) scrolls
+            // in one ScrollView owned by the window. Height is updated on every rebuild.
+            _tree.style.flexShrink = 0;
+            _tree.style.backgroundColor = Color.clear; // the left panel's background, like the sections above
+            var own = _tree.Q<ScrollView>();
+            if (own != null)
+            {
+                own.verticalScrollerVisibility = ScrollerVisibility.Hidden;
+                own.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+            }
             _tree.itemExpandedChanged += OnExpandedChanged;
             _tree.selectedIndicesChanged += OnSelectedIndicesChanged;
             Add(_tree);
@@ -70,6 +80,19 @@ namespace BetterProject.Editor
             _showPackages = show;
             Rebuild();
         }
+
+        /// <summary>Gap above the Packages root ("Sidebar spacing", as between the sections).</summary>
+        public void SetRootSpacing(float gap)
+        {
+            if (Mathf.Approximately(gap, _rootSpacing)) return;
+            _rootSpacing = gap;
+            _tree.RefreshItems();
+            UpdateHeight();
+        }
+
+        // All rows plus the Packages gap: the tree never scrolls itself.
+        void UpdateHeight() =>
+            _tree.style.height = _tree.viewController.GetItemsCount() * Theme.RowHeight + (_showPackages ? _rootSpacing : 0f);
 
         public void Rebuild()
         {
@@ -89,8 +112,20 @@ namespace BetterProject.Editor
                 foreach (var p in _selectedPaths)
                     if (_ids.TryGetValue(p, out int sid) && _built.Contains(sid)) ids.Add(sid);
                 if (ids.Count > 0) _tree.SetSelectionById(ids);
+                UpdateHeight();
             }
             finally { _busy = false; }
+        }
+
+        // Scrolls the enclosing (left panel) ScrollView to the row, once it is laid out.
+        void ScrollToId(int id)
+        {
+            schedule.Execute(() =>
+            {
+                var row = _tree.GetRootElementForId(id);
+                var scroll = GetFirstAncestorOfType<ScrollView>();
+                if (row != null && scroll != null) scroll.ScrollTo(row);
+            });
         }
 
         public void Reveal(string folderPath)
@@ -107,7 +142,7 @@ namespace BetterProject.Editor
                 _busy = true;
                 try { _tree.SetSelectionById(id); } finally { _busy = false; }
             }
-            if (_ids.TryGetValue(folderPath, out int sid) && _built.Contains(sid)) _tree.ScrollToItemById(sid);
+            if (_ids.TryGetValue(folderPath, out int sid) && _built.Contains(sid)) ScrollToId(sid);
         }
 
         // ---- building ----
@@ -175,10 +210,12 @@ namespace BetterProject.Editor
             var row = new VisualElement();
             row.style.flexDirection = FlexDirection.Row;
             row.style.alignItems = Align.Center;
+            row.style.height = Theme.RowHeight;
             var icon = new Image { name = "icon", scaleMode = ScaleMode.ScaleToFit };
             icon.style.width = 16;
             icon.style.height = 16;
             icon.style.marginRight = 3;
+            icon.style.flexShrink = 0;
             var label = new Label { name = "label" };
             label.style.whiteSpace = WhiteSpace.NoWrap;
             row.Add(icon);
@@ -198,6 +235,19 @@ namespace BetterProject.Editor
             var label = row.Q<Label>("label");
             FullNameOverlay.HideFor(row); // the row is about to show another folder
             ClearDropHighlight(row);
+            // The gap is a top border of the item's root in the panel's background colour: part of the row's measured
+            // height (so clicks map correctly) but drawn over its hover / selection highlight. Roots are recycled.
+            var item = row;
+            while (item != null && !item.ClassListContains(BaseVerticalCollectionView.itemUssClassName)) item = item.parent;
+            if (item != null)
+            {
+                float gap = node != null && node.Path == PackagesRoot ? _rootSpacing : 0f;
+                item.style.borderTopWidth = gap;
+                item.style.borderTopColor = Theme.WindowBackground;
+                // Dynamic height would let the theme's toggle size the row: pin it as fixed height did (border included).
+                item.style.height = Theme.RowHeight + gap;
+                item.style.minHeight = 0;
+            }
             row.userData = node != null && !node.Placeholder ? node.Path : null;
             if (node == null || node.Placeholder)
             {
@@ -254,6 +304,7 @@ namespace BetterProject.Editor
             if (primary == null) primary = paths[paths.Count - 1];
             _selectedPaths.Clear();
             _selectedPaths.AddRange(paths);
+            if (_ids.TryGetValue(primary, out int pid)) ScrollToId(pid); // keyboard moves: keep the row in view
             FoldersSelected?.Invoke(paths, primary);
         }
 
@@ -274,18 +325,8 @@ namespace BetterProject.Editor
             }
             PersistExpanded();
             // Rebuild after the tree finishes handling this event (loads/unloads that subtree).
-            // A full rebuild is kept (TreeView has no clean per-subtree swap); the scroll offset is preserved.
-            var scroll = _tree.Q<ScrollView>();
-            Vector2 offset = scroll != null ? scroll.scrollOffset : Vector2.zero;
-            _tree.schedule.Execute(() =>
-            {
-                Rebuild();
-                if (scroll != null)
-                {
-                    scroll.scrollOffset = offset;
-                    _tree.schedule.Execute(() => scroll.scrollOffset = offset);
-                }
-            });
+            // A full rebuild is kept (TreeView has no clean per-subtree swap).
+            _tree.schedule.Execute(Rebuild);
         }
 
         void AddDescendants(string path)

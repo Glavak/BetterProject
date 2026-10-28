@@ -115,16 +115,16 @@ namespace BetterProject.Editor
             _content = new ContentView { IconSize = iconSize };
             var split = new TwoPaneSplitView(0, Mathf.Max(100f, splitterWidth), TwoPaneSplitViewOrientation.Horizontal);
             split.style.flexGrow = 1;
-            // Left panel = Favourites, Recents and (optional) New assets sections above the folder tree. The sections share one container
-            // capped at 55% of the panel; when their content exceeds it both shrink (in proportion to their content)
-            // and scroll internally, so the tree always keeps at least 45% of the panel.
-            var left = _left = new VisualElement();
-            left.style.flexDirection = FlexDirection.Column;
+            // Left panel = Favourites, Recents and (optional) New assets sections above the folder tree, all at full
+            // height in one ScrollView: a single scrollbar for the whole panel.
+            var left = new ScrollView(ScrollViewMode.Vertical);
+            _left = left;
+            left.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+            left.verticalScroller.valueChanged += _ => FullNameOverlay.Hide();
             left.style.minWidth = 100;
             var sections = new VisualElement { name = "sections" };
             sections.style.flexDirection = FlexDirection.Column;
-            sections.style.flexShrink = 1;
-            sections.style.maxHeight = Length.Percent(55);
+            sections.style.flexShrink = 0;
             _favourites = CreateFavouritesSection();
             sections.Add(_favourites);
             _recents = CreateRecentsSection();
@@ -132,7 +132,6 @@ namespace BetterProject.Editor
             _newAssets = CreateNewAssetsSection();
             sections.Add(_newAssets);
             left.Add(sections);
-            _tree.style.minHeight = 60;
             left.Add(_tree);
             split.Add(left);
             // Right panel = breadcrumb bar above the content view.
@@ -158,11 +157,13 @@ namespace BetterProject.Editor
             var bottom = new VisualElement();
             bottom.style.flexDirection = FlexDirection.Row;
             bottom.style.justifyContent = Justify.FlexEnd;
-            bottom.style.height = 20;
+            bottom.style.height = 22;
+            bottom.style.flexShrink = 0; // the split above grows; without this a tall panel squeezes the bar
             bottom.style.alignItems = Align.Center;
             var slider = new Slider(0, 96) { value = ContentView.SnapIconSize(iconSize) };
             slider.style.width = 100;
             slider.style.marginRight = 6;
+            slider.style.marginTop = slider.style.marginBottom = 0;
             slider.RegisterValueChangedCallback(e =>
             {
                 float snapped = ContentView.SnapIconSize(e.newValue); // (0, 32) snaps to 32
@@ -235,6 +236,7 @@ namespace BetterProject.Editor
             _recents.style.marginTop = s.ShowFavourites ? gap : 0;
             _newAssets.style.marginTop = s.ShowFavourites || s.ShowRecents ? gap : 0;
             _tree.style.marginTop = s.ShowFavourites || s.ShowRecents || s.ShowNewAssets ? gap : 0;
+            _tree.SetRootSpacing(gap); // between Assets and Packages
 
             // Highlight under mouse.
             _left?.EnableInClassList(Theme.NoHoverClass, !s.HoverLeftPanel);
@@ -253,6 +255,7 @@ namespace BetterProject.Editor
             section.FillContextMenu = (entry, menu) =>
                 menu.AddItem(new GUIContent("Remove from Favourites"), false, () => FavouritesStore.Remove(entry.Ref));
             section.HandleDrop = HandleFavouritesDrop;
+            section.EmptyText = "Drag to add";
             UpdateFavouritesWarning(section);
             return section;
         }

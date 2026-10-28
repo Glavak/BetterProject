@@ -66,7 +66,7 @@ namespace BetterProject.Editor
         readonly VisualElement _header;
         readonly Toggle _toggle;
         readonly Image _warning;
-        readonly ScrollView _body;
+        readonly VisualElement _body;
         bool _collapsed;
 
         Row _dragRow;
@@ -90,6 +90,11 @@ namespace BetterProject.Editor
         /// <summary>Adds items to the context menu of a top-level entry (right click). Null = no menu.</summary>
         public Action<RefSectionEntry, GenericMenu> FillContextMenu;
 
+        /// <summary>Italic hint shown in place of rows when the section is expanded but has no entries.</summary>
+        public string EmptyText = "Nothing here";
+
+        const string HeaderKey = "header";
+
         /// <summary>Adds items to the context menu of the section header (right click). Null = no menu.</summary>
         public Action<GenericMenu> FillHeaderContextMenu;
 
@@ -110,8 +115,7 @@ namespace BetterProject.Editor
             _collapsed = collapsed;
 
             style.flexDirection = FlexDirection.Column;
-            style.flexShrink = 1;
-            style.minHeight = RowHeight; // header never squeezed away
+            style.flexShrink = 0; // full height: the left panel scrolls as a whole
 
             _toggle = MakeToggle();
             _toggle.SetValueWithoutNotify(!_collapsed);
@@ -142,7 +146,9 @@ namespace BetterProject.Editor
                 if (e.button != 0) { if (e.button == 1) e.StopPropagation(); return; }
                 if (IsInside(e.target, _toggle)) return; // the arrow toggles itself
                 e.StopPropagation();
-                SetCollapsed(!_collapsed);
+                // Like the folder tree's roots: a click selects the row, a double click expands / collapses it.
+                if (e.clickCount >= 2) SetCollapsed(!_collapsed);
+                else SelectHeader();
             });
             _header.RegisterCallback<PointerUpEvent>(e =>
             {
@@ -150,10 +156,7 @@ namespace BetterProject.Editor
             });
             Add(_header);
 
-            _body = new ScrollView(ScrollViewMode.Vertical);
-            _body.style.flexShrink = 1;
-            _body.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
-            _body.verticalScroller.valueChanged += _ => FullNameOverlay.Hide();
+            _body = new VisualElement();
             Add(_body);
 
             RegisterCallback<DragUpdatedEvent>(OnDragUpdated);
@@ -259,14 +262,17 @@ namespace BetterProject.Editor
         public void Rebuild()
         {
             DisarmDrag();
-            // Clearing clamps the scroll offset to 0: keep it across rebuilds (store changes, project changes, expand).
-            var offset = _body.scrollOffset;
             FullNameOverlay.Hide();
             _rows.Clear();
             _body.Clear();
             if (_collapsed) return; // built when expanded
             var entries = _entries?.Invoke();
-            if (entries == null) return;
+            if (entries == null || entries.Count == 0)
+            {
+                AddEmptyHint();
+                RefreshSelection();
+                return;
+            }
             foreach (var e in entries)
             {
                 var row = ResolveEntry(e);
@@ -274,7 +280,21 @@ namespace BetterProject.Editor
                 if (row.IsFolder && !row.Missing && _expanded.Contains(row.Path)) AddChildren(row.Path, 1);
             }
             RefreshSelection();
-            RestoreScroll(offset);
+        }
+
+        void AddEmptyHint()
+        {
+            var toggle = MakeToggle();
+            toggle.style.visibility = Visibility.Hidden;
+            var label = new Label(EmptyText);
+            label.style.unityFontStyleAndWeight = FontStyle.Italic;
+            label.style.color = Theme.DimText;
+            var content = MakeContent(null, label);
+            content.Q<Image>("icon").style.display = DisplayStyle.None;
+            var el = MakeTreeRow(1, toggle, content);
+            el.RemoveFromClassList(BaseVerticalCollectionView.itemUssClassName); // not a row: no hover
+            el.pickingMode = PickingMode.Ignore;
+            _body.Add(el);
         }
 
         Row ResolveEntry(RefSectionEntry e)
@@ -409,20 +429,15 @@ namespace BetterProject.Editor
             Rebuild();
         }
 
-        // Set now and again after layout (the new content size is only known then; the ScrollView clamps to it).
-        void RestoreScroll(Vector2 offset)
-        {
-            if (offset == Vector2.zero) return;
-            _body.scrollOffset = offset;
-            _body.schedule.Execute(() => _body.scrollOffset = offset);
-        }
-
         // Identifies a row across rebuilds; the same asset can appear twice (top level and inside a folder entry).
         static string KeyOf(Row r) => r.Depth + "|" + (r.Path ?? r.Guid) + "|" + (r.IsSubAsset ? r.InstanceId : 0);
 
         /// <summary>Highlights the row clicked in this section, if any.</summary>
         public void RefreshSelection()
         {
+            _header.style.backgroundColor = _selectedKey == HeaderKey
+                ? new StyleColor(SelectedColor)
+                : new StyleColor(StyleKeyword.Null);
             foreach (var r in _rows)
                 // Not selected: no inline colour, so the theme's hover highlight shows.
                 r.Element.style.backgroundColor = _selectedKey != null && KeyOf(r) == _selectedKey
@@ -442,9 +457,17 @@ namespace BetterProject.Editor
         /// <summary>Unity's selection changed: keep the highlight only if it is still exactly what this section set.</summary>
         public void OnUnitySelectionChanged()
         {
-            if (_selectedKey == null) return;
+            if (_selectedKey == null || _selectedKey == HeaderKey) return; // the header selects no object
             var ids = Selection.instanceIDs;
             if (_selectedId == 0 || ids.Length != 1 || ids[0] != _selectedId) ClearSelection();
+        }
+
+        void SelectHeader()
+        {
+            _selectedKey = HeaderKey;
+            _selectedId = 0;
+            RefreshSelection();
+            RowSelected?.Invoke();
         }
 
         void SelectRow(Row row)

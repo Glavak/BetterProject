@@ -105,6 +105,7 @@ namespace BetterProject.Editor
         VisualElement _dragCell;
         VisualElement _dropCell;    // folder cell currently highlighted as a drop target
         bool _dropOnView;
+        readonly VisualElement _dropFrame;   // drop-on-view outline: an overlay, so it does not shift the content
 
         Label _emptyMessage;
 
@@ -154,6 +155,15 @@ namespace BetterProject.Editor
             };
             _list.style.flexGrow = 1;
             Add(_list);
+            _dropFrame = new VisualElement { name = "drop-frame", pickingMode = PickingMode.Ignore };
+            _dropFrame.style.position = Position.Absolute;
+            _dropFrame.style.left = _dropFrame.style.right = _dropFrame.style.top = _dropFrame.style.bottom = 0;
+            _dropFrame.style.borderTopWidth = _dropFrame.style.borderBottomWidth =
+                _dropFrame.style.borderLeftWidth = _dropFrame.style.borderRightWidth = 2;
+            _dropFrame.style.borderTopColor = _dropFrame.style.borderBottomColor =
+                _dropFrame.style.borderLeftColor = _dropFrame.style.borderRightColor = DropColor;
+            _dropFrame.style.display = DisplayStyle.None;
+            Add(_dropFrame);
             // Focus moving out of the list (to another element, or nowhere when the window loses focus). Moves inside
             // it (the rename field) do not count.
             _list.RegisterCallback<FocusOutEvent>(e =>
@@ -292,6 +302,7 @@ namespace BetterProject.Editor
                 icon.style.width = 16;
                 icon.style.height = 16;
                 icon.style.marginRight = 4;
+                icon.style.flexShrink = 0; // a long name must not squeeze the icon
                 label.style.whiteSpace = WhiteSpace.NoWrap;
                 arrow.style.height = RowHeight;
                 cell.Add(arrow);
@@ -314,10 +325,12 @@ namespace BetterProject.Editor
                 icon.style.height = _iconSize;
                 icon.style.alignSelf = Align.Center;
                 icon.style.marginBottom = 2;
+                icon.style.flexShrink = 0; // a long name must not squeeze the thumbnail
                 label.style.fontSize = 10;
                 label.style.unityTextAlign = TextAnchor.UpperCenter;
                 label.style.whiteSpace = WhiteSpace.Normal; // wraps to 2 lines; the fixed height clips the rest
                 label.style.height = TileLabelHeight;
+                label.style.flexShrink = 0;
                 arrow.style.position = Position.Absolute;
                 arrow.style.right = 2;
                 arrow.style.top = 2 + _iconSize * 0.5f - 8;
@@ -781,9 +794,8 @@ namespace BetterProject.Editor
             if (_dropOnView != onView)
             {
                 _dropOnView = onView;
-                var c = onView ? DropColor : Color.clear;
-                style.borderTopWidth = style.borderBottomWidth = style.borderLeftWidth = style.borderRightWidth = onView ? 2 : 0;
-                style.borderTopColor = style.borderBottomColor = style.borderLeftColor = style.borderRightColor = c;
+                _dropFrame.style.display = onView ? DisplayStyle.Flex : DisplayStyle.None;
+                _dropFrame.BringToFront();
             }
         }
 
