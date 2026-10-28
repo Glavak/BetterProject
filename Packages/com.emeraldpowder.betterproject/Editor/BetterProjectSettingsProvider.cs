@@ -20,7 +20,7 @@ namespace BetterProject.Editor
             keywords = new HashSet<string>
             {
                 "Better Project", "Project window", "Sidebar", "Spacing", "Show", "Favourites", "Recents", "Packages",
-                "Highlight", "Hover", "Mouse", "Panel", "Select", "Folders", "Right pane", "Delete", "Confirmation", "Offset", "Padding", "Max recents", "Max new assets", "New assets", "Asset changed", "Prefab opened", "Scene opened", "Asset imported",
+                "Highlight", "Hover", "Mouse", "Panel", "Select", "Folders", "Right pane", "Delete", "Confirmation", "Offset", "Padding", "Max recents", "Max new assets", "New assets", "Create", "Plus", "Button", "Asset changed", "Prefab opened", "Scene opened", "Asset imported",
             },
             activateHandler = (search, root) => Build(root, BetterProjectSettings.instance),
         };
@@ -52,6 +52,8 @@ namespace BetterProject.Editor
             Option(show, "Packages", "Show the Packages folder in the left panel's folder tree.", s.ShowPackages, v => s.ShowPackages = v);
             Option(show, "New assets", "Show the newest added assets in a section of the left panel, below Recents.",
                 s.ShowNewAssets, v => s.ShowNewAssets = v);
+            Option(show, "Create button", "Show the \"+\" button left of the search field. It opens the Create menu for the folder shown.",
+                s.ShowCreateButton, v => s.ShowCreateButton = v);
 
             Option(show, "Remove offset in right panel",
                 "List view: icons start at the left edge, without the padding Unity's Project window has there. " +

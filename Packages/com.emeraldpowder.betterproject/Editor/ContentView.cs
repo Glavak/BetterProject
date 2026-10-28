@@ -50,6 +50,18 @@ namespace BetterProject.Editor
         bool _pendingIsFolder;
         Texture _pendingIcon;
 
+        // Ping (see Ping): a yellow square over the item, shrinking from big to the item's size, then fading out.
+        static readonly Color PingColor = new Color(1f, 0.82f, 0.1f, 1f);
+        const float PingAlpha = 0.6f;
+        const float PingInflate = 48f;    // the start square extends this far around the item on each side
+        const double PingShrink = 0.25, PingHold = 0.25, PingFade = 0.6; // seconds
+        const int PingMaxWaitTicks = 30;  // ~0.5 s for the scrolled-to item to be laid out
+        string _pingPath;
+        double _pingStart;                // < 0: waiting for the item's cell
+        int _pingWaitTicks;
+        VisualElement _pingOverlay;
+        IVisualElementScheduledItem _pingAnim;
+
         // Slow-click rename tracking.
         string _lastClickPath;
         double _lastClickTime;
@@ -1060,6 +1072,69 @@ namespace BetterProject.Editor
         {
             int i = IndexOfPath(path);
             if (i >= 0) _list.ScrollToItem(RowOf(i));
+        }
+
+        /// <summary>Scrolls to a shown item and flashes it, like a ping in Unity's Project window. Selection is unchanged.</summary>
+        public void Ping(string path)
+        {
+            int i = IndexOfPath(path);
+            if (i < 0) return;
+            _pingPath = path;
+            _list.ScrollToItem(RowOf(i));
+            if (_pingOverlay == null)
+            {
+                _pingOverlay = new VisualElement { name = "ping", pickingMode = PickingMode.Ignore };
+                _pingOverlay.style.position = Position.Absolute;
+                _pingOverlay.style.backgroundColor = PingColor;
+                _pingOverlay.style.borderTopLeftRadius = _pingOverlay.style.borderTopRightRadius =
+                    _pingOverlay.style.borderBottomLeftRadius = _pingOverlay.style.borderBottomRightRadius = 3;
+                Add(_pingOverlay);
+            }
+            _pingOverlay.BringToFront();
+            _pingOverlay.style.display = DisplayStyle.None; // until the scrolled-to cell is laid out
+            _pingStart = -1;
+            _pingWaitTicks = 0;
+            _pingAnim?.Pause();
+            _pingAnim = schedule.Execute(StepPing).Every(16);
+        }
+
+        void StepPing()
+        {
+            int i = _pingPath != null ? IndexOfPath(_pingPath) : -1;
+            var cell = i >= 0 ? CellFor(i) : null;
+            if (cell == null || !(cell.userData is int bound) || bound != i || float.IsNaN(cell.layout.width))
+            {
+                // Not laid out yet after the scroll: wait a little. Scrolled out / gone mid-animation: stop.
+                if (_pingStart >= 0 || ++_pingWaitTicks > PingMaxWaitTicks) StopPing();
+                return;
+            }
+            double now = EditorApplication.timeSinceStartup;
+            if (_pingStart < 0) _pingStart = now;
+            double t = now - _pingStart;
+            if (t >= PingShrink + PingHold + PingFade) { StopPing(); return; }
+
+            Rect target = this.WorldToLocal(cell.worldBound);
+            // Shrink (ease-out) from a big square around the item to the item's rect.
+            float k = t < PingShrink ? 1f - (float)(t / PingShrink) : 0f;
+            k *= k;
+            float side = Mathf.Max(target.width, target.height) + 2 * PingInflate;
+            float w = Mathf.Lerp(target.width, side, k), h = Mathf.Lerp(target.height, side, k);
+            float alpha = t <= PingShrink + PingHold ? PingAlpha
+                : PingAlpha * (1f - (float)((t - PingShrink - PingHold) / PingFade));
+            var s = _pingOverlay.style;
+            s.left = target.center.x - w / 2;
+            s.top = target.center.y - h / 2;
+            s.width = w;
+            s.height = h;
+            s.opacity = alpha;
+            s.display = DisplayStyle.Flex;
+        }
+
+        void StopPing()
+        {
+            _pingAnim?.Pause();
+            _pingPath = null;
+            if (_pingOverlay != null) _pingOverlay.style.display = DisplayStyle.None;
         }
 
         /// <summary>Starts inline rename of a visible item. Returns false if it is not shown here.</summary>

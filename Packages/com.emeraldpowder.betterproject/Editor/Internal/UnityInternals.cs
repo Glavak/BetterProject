@@ -113,6 +113,13 @@ namespace BetterProject.Editor.Internal
         /// </summary>
         /// <summary>Object name that marks our hidden proxies (used to find leftovers after a domain reload).</summary>
         const string ProxyName = "BetterProject.CreateProxy";
+        /// <summary>Object name of the hidden ping listener (see <see cref="TryInstallPingListener"/>).</summary>
+        const string PingListenerName = "BetterProject.PingListener";
+
+        // Hidden browsers created in this domain. Any other one carrying our names is a leftover of a domain reload.
+        static readonly HashSet<Object> s_Live = new HashSet<Object>();
+
+        static bool IsOurs(Object browser) => browser.name == ProxyName || browser.name == PingListenerName;
 
         public sealed class CreateProxy
         {
@@ -154,6 +161,7 @@ namespace BetterProject.Editor.Internal
                 // It does survive domain reloads, hence the ProxyName marker and TryDestroyOrphanProxies.
                 proxy.hideFlags = HideFlags.HideAndDontSave;
                 proxy.name = ProxyName;
+                s_Live.Add(proxy);
                 handle.Proxy = proxy;
                 s_PbInit.Invoke(proxy, null);
                 // A folder that can't hold assets (the virtual "Packages" root) still needs a valid folder in the proxy;
@@ -326,7 +334,7 @@ namespace BetterProject.Editor.Internal
                 foreach (var o in Resources.FindObjectsOfTypeAll(s_PbType)) if (o != null && !candidates.Contains(o)) candidates.Add(o);
                 foreach (var browser in candidates)
                 {
-                    if (browser.name == ProxyName) continue;
+                    if (IsOurs(browser)) continue;
                     var filter = s_PbSearchFilter.GetValue(browser);
                     if (filter == null || s_SfGetState.Invoke(filter, null).ToString() != "FolderBrowsing") continue;
                     var folders = (string[])s_SfFolders.GetValue(filter);
@@ -429,11 +437,11 @@ namespace BetterProject.Editor.Internal
         }
 
         /// <summary>
-        /// Destroys hidden proxies that outlived their handle (e.g. across a domain reload, where the native object
-        /// survives and its OnEnable re-registers it as last-interacted). Hands "last interacted" to a real browser.
-        /// Pass the currently installed handle (or null) so it is kept.
+        /// Destroys hidden proxies / ping listeners that outlived their handle (e.g. across a domain reload, where the
+        /// native object survives and its OnEnable re-registers it as last-interacted). Hands "last interacted" to a
+        /// real browser. The ones created in this domain are kept.
         /// </summary>
-        public static bool TryDestroyOrphanProxies(CreateProxy keep)
+        public static bool TryDestroyOrphanProxies()
         {
             if (!Resolve()) return false;
             try
@@ -441,11 +449,10 @@ namespace BetterProject.Editor.Internal
                 var all = Resources.FindObjectsOfTypeAll(s_PbType);
                 Object realBrowser = null;
                 foreach (var o in all)
-                    if (o != null && o.name != ProxyName) { realBrowser = o; break; }
+                    if (o != null && !IsOurs(o)) { realBrowser = o; break; }
                 foreach (var o in all)
                 {
-                    if (o == null || o.name != ProxyName) continue;
-                    if (keep != null && ReferenceEquals(o, keep.Proxy)) continue;
+                    if (o == null || !IsOurs(o) || s_Live.Contains(o)) continue;
                     if (ReferenceEquals(s_LastInteracted.GetValue(null), o)) s_LastInteracted.SetValue(null, realBrowser);
                     Object.DestroyImmediate(o);
                 }
@@ -542,6 +549,7 @@ namespace BetterProject.Editor.Internal
             catch (Exception e) { Warn("ProjectBrowser.s_LastInteractedProjectBrowser", e); ok = false; }
             try
             {
+                s_Live.Remove(proxy);
                 if (proxy != null) Object.DestroyImmediate(proxy);
             }
             catch (Exception e) { Warn("ProjectBrowser proxy destroy", e); ok = false; }
@@ -613,6 +621,121 @@ namespace BetterProject.Editor.Internal
                 Debug.LogException(e);
                 return false;
             }
+        }
+
+        // ---------------------------------------------------------------- ping listener
+
+        // EditorGUIUtility.PingObject (clicking an object field or the prefab asset field in the Inspector, ...) calls
+        // FrameObject(id, ping) on every ProjectBrowser in ProjectBrowser.s_ProjectBrowsers, and FrameObject records the
+        // id in m_LastFramedID. A hidden, never-shown ProjectBrowser is in that list too: reading (and resetting) its
+        // m_LastFramedID tells which object was pinged. Never shown, it gets no OnSelectionChange / OnGUI, the only
+        // other paths that frame something.
+
+        public sealed class PingListener
+        {
+            internal EditorWindow Browser;
+        }
+
+        static bool s_PingResolved;
+        static FieldInfo s_PbLastFramedId;      // ProjectBrowser.m_LastFramedID
+
+        static bool ResolvePing()
+        {
+            if (s_PingResolved) return s_PbLastFramedId != null;
+            s_PingResolved = true;
+            if (!Resolve()) return false;
+            try
+            {
+                var f = s_PbType.GetField("m_LastFramedID", AnyInstance);
+                if (f == null || f.FieldType != typeof(int)) { Warn("ProjectBrowser.m_LastFramedID"); return false; }
+                s_PbLastFramedId = f;
+                return true;
+            }
+            catch (Exception e)
+            {
+                Warn("ProjectBrowser.m_LastFramedID", e);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Creates the hidden ProjectBrowser that receives pings. Unlike the create proxy it never stays the
+        /// last-interacted browser. Returns null on failure. Uninstall with <see cref="TryUninstallPingListener"/>.
+        /// </summary>
+        public static PingListener TryInstallPingListener()
+        {
+            if (!ResolvePing()) return null;
+            var handle = new PingListener();
+            EditorWindow browser = null;
+            object previous = null;
+            int[] savedExpanded = null;
+            try
+            {
+                previous = s_LastInteracted.GetValue(null);
+                savedExpanded = InternalEditorUtility.expandedProjectWindowItems;
+                browser = (EditorWindow)ScriptableObject.CreateInstance(s_PbType); // its OnEnable makes it last-interacted
+                browser.hideFlags = HideFlags.HideAndDontSave;
+                browser.name = PingListenerName;
+                s_Live.Add(browser);
+                handle.Browser = browser;
+                s_PbInit.Invoke(browser, null);
+                s_PbLastFramedId.SetValue(browser, -1); // Init framed the selection
+                return handle;
+            }
+            catch (Exception e)
+            {
+                Warn("ProjectBrowser ping listener", e);
+                TryUninstallPingListener(handle);
+                return null;
+            }
+            finally
+            {
+                try
+                {
+                    // Hand "last interacted" back (a destroyed previous browser compares equal to null: store null).
+                    // After a failure the listener is gone and the field was cleared.
+                    var current = s_LastInteracted.GetValue(null) as Object;
+                    if (browser != null && (ReferenceEquals(current, browser) || current == null))
+                        s_LastInteracted.SetValue(null, previous is Object o && o != null ? previous : null);
+                    // Init frames the selection in the folder tree, which writes the shared expanded state.
+                    if (savedExpanded != null) InternalEditorUtility.expandedProjectWindowItems = savedExpanded;
+                }
+                catch (Exception e) { Warn("ProjectBrowser ping listener", e); }
+            }
+        }
+
+        /// <summary>If an object was pinged since the last call, returns its instance id (main asset or sub-asset).</summary>
+        public static bool TryTakePing(PingListener handle, out int instanceId)
+        {
+            instanceId = 0;
+            if (handle == null || handle.Browser == null || s_PbLastFramedId == null) return false;
+            try
+            {
+                int id = (int)s_PbLastFramedId.GetValue(handle.Browser);
+                if (id == -1) return false;
+                s_PbLastFramedId.SetValue(handle.Browser, -1);
+                instanceId = id;
+                return id != 0;
+            }
+            catch (Exception e)
+            {
+                Warn("ProjectBrowser.m_LastFramedID", e);
+                return false;
+            }
+        }
+
+        public static void TryUninstallPingListener(PingListener handle)
+        {
+            if (handle == null || handle.Browser == null) return;
+            var browser = handle.Browser;
+            handle.Browser = null;
+            s_Live.Remove(browser);
+            try
+            {
+                if (ReferenceEquals(s_LastInteracted.GetValue(null), browser)) s_LastInteracted.SetValue(null, null);
+                Object.DestroyImmediate(browser);
+            }
+            catch (Exception e) { Warn("ProjectBrowser ping listener destroy", e); }
         }
 
         // ---------------------------------------------------------------- main asset id without loading

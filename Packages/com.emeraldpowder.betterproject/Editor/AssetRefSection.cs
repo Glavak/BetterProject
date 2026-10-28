@@ -91,7 +91,17 @@ namespace BetterProject.Editor
         public Action<RefSectionEntry, GenericMenu> FillContextMenu;
 
         /// <summary>Italic hint shown in place of rows when the section is expanded but has no entries.</summary>
-        public string EmptyText = "Nothing here";
+        public string EmptyText
+        {
+            get => _emptyText;
+            set
+            {
+                if (_emptyText == value) return;
+                _emptyText = value;
+                Rebuild(); // the constructor already built the rows (and the hint) with the old text
+            }
+        }
+        string _emptyText = "Nothing here";
 
         const string HeaderKey = "header";
 

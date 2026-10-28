@@ -29,6 +29,13 @@ namespace BetterProject.Editor
         int _measureTries;
         const int MaxMeasureTries = 30;       // ~0.5 s of 16 ms retries; later layout changes re-measure via geometry
 
+        // Collapse is decided in the same frame as a rebuild (no frame with the full, uncollapsed path): segment widths
+        // come from earlier measurements, else from text measured on laid-out hidden probes; Measure then corrects them.
+        readonly Dictionary<string, float> _widthCache = new Dictionary<string, float>(); // name + bold flag -> segment width
+        const int MaxWidthCache = 512;
+        readonly Button _probe, _boldProbe, _arrowProbe;
+        float _arrowWidth = -1;
+
         /// <summary>Raised with a folder path when a name or a subfolder menu entry is chosen.</summary>
         public event Action<string> Navigate;
 
@@ -37,7 +44,7 @@ namespace BetterProject.Editor
             name = "breadcrumbs";
             style.flexDirection = FlexDirection.Row;
             style.alignItems = Align.Center;
-            style.height = 22;
+            style.height = 18;
             style.flexShrink = 0;
             // Splitter between the path bar and the list, as in Unity's Project window.
             style.borderBottomWidth = 1;
@@ -52,6 +59,11 @@ namespace BetterProject.Editor
             Add(_row);
             _ellipsis = MakeButton(Ellipsis, ShowHiddenMenu);
             _ellipsis.tooltip = "Show hidden parent folders";
+            SetEllipsisShown(false);
+            _probe = MakeProbe(false);
+            _boldProbe = MakeProbe(true);
+            _arrowProbe = MakeProbe(false);
+            StyleArrow(_arrowProbe);
             RegisterCallback<GeometryChangedEvent>(e =>
             {
                 if (Mathf.Abs(e.newRect.width - e.oldRect.width) <= 0.5f) return;
@@ -118,7 +130,7 @@ namespace BetterProject.Editor
             _widths.Clear();
             _hidden = -1;
             _row.Add(_ellipsis);
-            _ellipsis.style.display = DisplayStyle.None;
+            SetEllipsisShown(false);
             for (int i = 0; i < _crumbs.Count; i++)
             {
                 var c = _crumbs[i];
@@ -133,13 +145,78 @@ namespace BetterProject.Editor
                 Button arrow = null;
                 arrow = MakeButton(Arrow, () => ShowSubfolderMenu(c.Path, arrow));
                 arrow.tooltip = "Subfolders";
-                arrow.style.color = Theme.DimText;
+                StyleArrow(arrow);
                 seg.Add(arrow);
                 _row.Add(seg);
                 _segments.Add(seg);
             }
-            // Measure once laid out with everything visible; later width changes reuse the measured widths.
+            // Known / estimated widths: collapse now, before the first layout. Then measure the real widths once laid
+            // out; later width changes reuse them.
+            if (TryKnownWidths()) ApplyCollapse();
             ScheduleMeasure(0);
+        }
+
+        static string WidthKey(string name, bool bold) => (bold ? "b|" : "r|") + name;
+
+        bool TryKnownWidths()
+        {
+            _widths.Clear();
+            for (int i = 0; i < _crumbs.Count; i++)
+            {
+                string name = _crumbs[i].Name;
+                bool bold = i == _crumbs.Count - 1;
+                if (!_widthCache.TryGetValue(WidthKey(name, bold), out float w) && !TryEstimateWidth(name, bold, out w))
+                {
+                    _widths.Clear();
+                    return false;
+                }
+                _widths.Add(w);
+            }
+            return true;
+        }
+
+        // Button text width (via a laid-out probe with the same style) + its padding + the arrow button.
+        bool TryEstimateWidth(string name, bool bold, out float width)
+        {
+            width = 0;
+            var probe = bold ? _boldProbe : _probe;
+            if (float.IsNaN(probe.layout.width) || probe.layout.width <= 0 || float.IsNaN(_arrowProbe.layout.width)) return false;
+            float arrow = _arrowWidth > 0 ? _arrowWidth : ButtonWidth(_arrowProbe, Arrow); // not measured yet: estimate too
+            width = ButtonWidth(probe, name) + arrow;
+            return !float.IsNaN(width) && width > arrow;
+        }
+
+        static float ButtonWidth(Button probe, string text) =>
+            Mathf.Ceil(probe.MeasureTextSize(text, 0, MeasureMode.Undefined, 0, MeasureMode.Undefined).x
+                       + probe.resolvedStyle.paddingLeft + probe.resolvedStyle.paddingRight);
+
+        // The subfolder arrow: smaller and tighter than the folder names.
+        static void StyleArrow(Button arrow)
+        {
+            arrow.style.color = Theme.DimText;
+            arrow.style.fontSize = 11;
+            arrow.style.paddingLeft = 0;
+            arrow.style.paddingRight = 0;
+        }
+
+        Button MakeProbe(bool bold)
+        {
+            var b = MakeButton("M", null);
+            if (bold) b.style.unityFontStyleAndWeight = FontStyle.Bold;
+            b.style.position = Position.Absolute; // takes no space in the bar
+            b.style.visibility = Visibility.Hidden;
+            b.pickingMode = PickingMode.Ignore;
+            Add(b);
+            return b;
+        }
+
+        // Hidden, the ellipsis stays laid out (absolute, invisible), so its width is always known without a frame
+        // in which it shows.
+        void SetEllipsisShown(bool shown)
+        {
+            _ellipsis.style.position = shown ? Position.Relative : Position.Absolute;
+            _ellipsis.style.visibility = shown ? Visibility.Visible : Visibility.Hidden;
+            _ellipsis.pickingMode = shown ? PickingMode.Position : PickingMode.Ignore;
         }
 
         // One measure chain at a time: a new schedule (Rebuild, geometry change) replaces the pending one.
@@ -154,14 +231,19 @@ namespace BetterProject.Editor
         void Measure()
         {
             if (_segments.Count == 0) return;
+            var known = new List<float>(_widths); // widths collapse was decided with (hidden segments keep these)
             _widths.Clear();
-            foreach (var s in _segments)
+            for (int i = 0; i < _segments.Count; i++)
             {
+                var s = _segments[i];
                 float w = s.layout.width;
+                if (s.resolvedStyle.display == DisplayStyle.None && known.Count == _segments.Count) w = known[i];
                 if (float.IsNaN(w) || w <= 0)
                 {
                     // Not laid out yet (e.g. hidden tab): retry briefly, then wait for a GeometryChangedEvent.
+                    // Keep the widths collapse was decided with: the retry needs them for the hidden segments.
                     _widths.Clear();
+                    if (known.Count == _segments.Count) _widths.AddRange(known);
                     if (++_measureTries > MaxMeasureTries) return;
                     _measure = _row.schedule.Execute(Measure);
                     _measure.ExecuteLater(16);
@@ -169,14 +251,17 @@ namespace BetterProject.Editor
                 }
                 _widths.Add(w);
             }
-            _ellipsis.style.display = DisplayStyle.Flex; // measure its width once, then ApplyCollapse sets visibility
-            _row.schedule.Execute(() =>
-            {
-                float w = _ellipsis.layout.width;
-                if (!float.IsNaN(w) && w > 0) _ellipsisWidth = w;
-                _hidden = -1;
-                ApplyCollapse();
-            }).ExecuteLater(0);
+            if (_widthCache.Count > MaxWidthCache) _widthCache.Clear();
+            for (int i = 0; i < _segments.Count && i < _crumbs.Count; i++)
+                if (_segments[i].resolvedStyle.display != DisplayStyle.None) // only real measurements
+                    _widthCache[WidthKey(_crumbs[i].Name, i == _crumbs.Count - 1)] = _widths[i];
+            var last = _segments[_segments.Count - 1]; // never collapsed
+            var arrow = last.childCount > 1 ? last[1] : null;
+            if (arrow != null && arrow.layout.width > 0) _arrowWidth = arrow.layout.width;
+            float ew = _ellipsis.layout.width;
+            if (!float.IsNaN(ew) && ew > 0) _ellipsisWidth = ew;
+            _hidden = -1;
+            ApplyCollapse();
         }
 
         void ApplyCollapse()
@@ -187,7 +272,7 @@ namespace BetterProject.Editor
             int hidden = BreadcrumbCollapse.HiddenCount(_widths, available, _ellipsisWidth);
             if (hidden == _hidden) return;
             _hidden = hidden;
-            _ellipsis.style.display = hidden > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            SetEllipsisShown(hidden > 0);
             for (int i = 0; i < _segments.Count; i++)
                 _segments[i].style.display = i < hidden ? DisplayStyle.None : DisplayStyle.Flex;
         }

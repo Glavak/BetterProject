@@ -25,7 +25,7 @@
 //   on every ProjectBrowser). Each update compares the proxy's browsed folder with handle.ShownFolder (which our own
 //   TrySetProxyFolder sets before navigating, so there is no feedback loop) and, if Unity moved it, navigates Better
 //   Project there and reveals the selection. A ping therefore navigates Better Project to the pinged asset's folder,
-//   as the default window does. Select Dependencies (ShowObjectsInList) is read from the proxy's list area (TryGetProxyObjectList) and shown in
+//   as the default window does (pings also reach Better Project without the proxy: PingTracker). Select Dependencies (ShowObjectsInList) is read from the proxy's list area (TryGetProxyObjectList) and shown in
 //   Better Project as a results list; the proxy is then reset to the folder.
 // - Proxy list selection is synced from Unity's selection before the menu opens (the proxy gets no OnSelectionChange).
 //
@@ -68,8 +68,8 @@ namespace BetterProject.Editor
         {
             AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
-            UnityInternals.TryDestroyOrphanProxies(null);
-            EditorApplication.delayCall += () => UnityInternals.TryDestroyOrphanProxies(s_Proxy);
+            UnityInternals.TryDestroyOrphanProxies();
+            EditorApplication.delayCall += () => UnityInternals.TryDestroyOrphanProxies();
         }
 
         static void OnBeforeAssemblyReload() => Disarm();
@@ -84,6 +84,15 @@ namespace BetterProject.Editor
             if (s_Proxy != null) UnityInternals.TrySyncProxySelection(s_Proxy); // for Assets/Open on a folder
             EditorUtility.DisplayPopupMenu(new Rect(mousePosition, Vector2.zero), "Assets/", null);
             Poll(); // most platforms run the chosen command before DisplayPopupMenu returns
+        }
+
+        /// <summary>The "+" button: Unity's Assets/Create menu below <paramref name="buttonRect"/>, creating in the shown folder.</summary>
+        public static void ShowCreateMenu(BetterProjectWindow window, Rect buttonRect)
+        {
+            if (window == null) return;
+            if (!string.IsNullOrEmpty(window.CurrentFolder)) EnsureInstalled(window);
+            EditorUtility.DisplayPopupMenu(buttonRect, "Assets/Create", null);
+            Poll();
         }
 
         static void EnsureInstalled(BetterProjectWindow window)

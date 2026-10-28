@@ -21,6 +21,7 @@ namespace BetterProject.Editor
         [SerializeField] bool showRecents = true;
         [SerializeField] bool showPackages = true;
         [SerializeField] bool showNewAssets;
+        [SerializeField] bool showCreateButton = true;
 
         [SerializeField] int maxRecents = 10;
         [SerializeField] int maxNewAssets = 20;
@@ -53,6 +54,8 @@ namespace BetterProject.Editor
         public bool ShowPackages { get => showPackages; set => Set(ref showPackages, value); }
         /// <summary>Show the "New assets" section in the left panel, below Recents (off by default).</summary>
         public bool ShowNewAssets { get => showNewAssets; set => Set(ref showNewAssets, value); }
+        /// <summary>Show the "+" (Create) button left of the search field.</summary>
+        public bool ShowCreateButton { get => showCreateButton; set => Set(ref showCreateButton, value); }
 
         /// <summary>How many entries Recents keeps.</summary>
         public int MaxRecents

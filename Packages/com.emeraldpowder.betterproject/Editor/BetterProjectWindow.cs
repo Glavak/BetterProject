@@ -35,6 +35,7 @@ namespace BetterProject.Editor
         SearchController _search;
         ToolbarSearchField _searchField;
         Button _objectsButton;
+        ToolbarButton _createButton;
         int[] _objectIds; // "Selected objects" results (Select Dependencies); null = not in that mode
         // Several folders selected in the tree: the right panel shows all their contents. Null = just currentFolder
         // (which is always the primary, i.e. last clicked, folder and the one breadcrumbs / Create use).
@@ -58,8 +59,23 @@ namespace BetterProject.Editor
             root.style.flexDirection = FlexDirection.Column;
             if (Theme.StyleSheet != null) root.styleSheets.Add(Theme.StyleSheet);
 
-            // Toolbar: search field (persisted text) + the "Selected objects" chip shown for object-list results.
+            // Toolbar: "+" (Create menu), search field (persisted text) + the "Selected objects" chip shown for
+            // object-list results.
             var toolbar = new Toolbar();
+            _createButton = new ToolbarButton { name = "create", tooltip = "Create" };
+            _createButton.clicked += () => AssetsContextMenu.ShowCreateMenu(this, _createButton.worldBound);
+            _createButton.style.flexShrink = 0;
+            _createButton.style.flexDirection = FlexDirection.Row;
+            _createButton.style.alignItems = Align.Center;
+            var plus = new Image { image = EditorGUIUtility.IconContent("Toolbar Plus").image, scaleMode = ScaleMode.ScaleToFit };
+            plus.style.width = 16;
+            plus.style.height = 16;
+            _createButton.Add(plus);
+            var dropArrow = new Image { image = EditorGUIUtility.IconContent("icon dropdown").image, scaleMode = ScaleMode.ScaleToFit };
+            dropArrow.style.width = 8;
+            dropArrow.style.height = 16;
+            _createButton.Add(dropArrow);
+            toolbar.Add(_createButton);
             _searchField = new ToolbarSearchField { name = "search" };
             _searchField.style.flexGrow = 1;
             _searchField.style.flexShrink = 1;
@@ -172,6 +188,11 @@ namespace BetterProject.Editor
                 _content.IconSize = snapped;
             });
             bottom.Add(slider);
+            // The ping listener can only be created inside OnGUI (see PingTracker): a 1 px IMGUI hook does it.
+            var pingHook = new IMGUIContainer(PingTracker.EnsureInstalledFromOnGUI);
+            pingHook.style.width = 1;
+            pingHook.style.height = 1;
+            bottom.Add(pingHook);
             root.Add(bottom);
 
             _tree.FoldersSelected += OnTreeFoldersSelected;
@@ -213,6 +234,7 @@ namespace BetterProject.Editor
             NewAssetsStore.Changed += OnNewAssetsChanged;
             BetterProjectSettings.Changed -= OnSettingsChanged;
             BetterProjectSettings.Changed += OnSettingsChanged;
+            PingTracker.Register(this);
             RevealSelection(); // highlight + scroll to the selected asset (e.g. the one whose folder was just opened)
         }
 
@@ -237,6 +259,8 @@ namespace BetterProject.Editor
             _newAssets.style.marginTop = s.ShowFavourites || s.ShowRecents ? gap : 0;
             _tree.style.marginTop = s.ShowFavourites || s.ShowRecents || s.ShowNewAssets ? gap : 0;
             _tree.SetRootSpacing(gap); // between Assets and Packages
+
+            if (_createButton != null) _createButton.style.display = s.ShowCreateButton ? DisplayStyle.Flex : DisplayStyle.None;
 
             // Highlight under mouse.
             _left?.EnableInClassList(Theme.NoHoverClass, !s.HoverLeftPanel);
@@ -380,6 +404,7 @@ namespace BetterProject.Editor
             RecentsStore.Changed -= OnRecentsChanged;
             NewAssetsStore.Changed -= OnNewAssetsChanged;
             BetterProjectSettings.Changed -= OnSettingsChanged;
+            PingTracker.Unregister(this);
             AssetsContextMenu.Disarm(this);
             // Window closing = focus loss: commit the typed name, but outside teardown (next editor tick).
             if (_content != null && _content.Rename.IsActive) _content.Rename.CommitDeferred();
@@ -518,10 +543,25 @@ namespace BetterProject.Editor
             if (active != null) _content.ScrollToPath(AssetDatabase.GetAssetPath(active));
         }
 
+        /// <summary>
+        /// A ping (e.g. an object field clicked in the Inspector), as in Unity's Project window: shows the asset's folder
+        /// (leaving search results), scrolls to the asset and flashes it. Unity's selection is left as it is.
+        /// </summary>
+        internal void PingAsset(string assetPath)
+        {
+            if (_content == null || !AssetPaths.IsProjectAssetPath(assetPath)) return;
+            string folder = AssetPaths.Parent(assetPath);
+            if (folder.Length == 0) return; // a root ("Assets"): no folder shows it
+            if (folder != currentFolder || _folders != null || _objectIds != null || _search.IsActive) NavigateTo(folder);
+            if (folder == currentFolder) _content.Ping(assetPath); // NavigateTo refuses folders it can't show
+        }
+
         /// <summary>Shows what the view represents now: object-list results, search results, or the current folder.</summary>
         void ShowCurrentFolder()
         {
             UpdateBreadcrumbs();
+            // Create puts the asset in the current folder (also while results are shown): only where it can be written.
+            _createButton?.SetEnabled(!string.IsNullOrEmpty(currentFolder) && AssetsContextMenu.IsWritableFolder(currentFolder));
             if (_objectIds != null)
             {
                 _content.DropFolder = null; // results are not a folder: drops on empty space are rejected
