@@ -58,6 +58,7 @@ namespace BetterProject.Editor
             root.Clear();
             root.style.flexDirection = FlexDirection.Column;
             if (Theme.StyleSheet != null) root.styleSheets.Add(Theme.StyleSheet);
+            root.EnableInClassList(Theme.DarkHoverClass, EditorGUIUtility.isProSkin);
 
             // Toolbar: "+" (Create menu), search field (persisted text) + the "Selected objects" chip shown for
             // object-list results.
@@ -157,7 +158,6 @@ namespace BetterProject.Editor
             right.style.flexDirection = FlexDirection.Column;
             right.style.minWidth = 100;
             right.style.backgroundColor = Theme.ContentBackground;
-            right.EnableInClassList(Theme.DarkContentClass, EditorGUIUtility.isProSkin);
             right.Add(_breadcrumbs);
             _content.style.flexGrow = 1;
             right.Add(_content);

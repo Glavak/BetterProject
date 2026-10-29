@@ -1,6 +1,6 @@
-/* Dark skin, right panel: the theme's row hover colour is the panel's own background, so use the Hierarchy's
-   hover colour. Before the .bp-no-hover rule so that one still wins. */
-.bp-content-dark .unity-collection-view__item:hover {
+/* Dark skin: rows and tiles hover in the Hierarchy's colour (the theme's row hover colour is barely apart from
+   the panel backgrounds). Before the rules below so that "Highlight under mouse" off and selected rows still win. */
+.bp-dark-hover .unity-collection-view__item:hover {
     background-color: #444444;
 }
 

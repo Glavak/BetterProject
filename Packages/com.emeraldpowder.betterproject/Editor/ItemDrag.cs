@@ -11,7 +11,8 @@ namespace BetterProject.Editor
     public static class ItemDrag
     {
         public static readonly Color DropColor = new Color(0.24f, 0.48f, 0.9f, 0.55f);
-        public static Color SelectedColor => EditorGUIUtility.isProSkin ? new Color(0.17f, 0.36f, 0.53f, 1f) : new Color(0.24f, 0.48f, 0.90f, 1f);
+        // The theme's selected-row colour (focused list), so inline selections match the folder tree's.
+        public static Color SelectedColor => EditorGUIUtility.isProSkin ? new Color(0.173f, 0.365f, 0.529f, 1f) : new Color(0.227f, 0.447f, 0.69f, 1f);
 
         /// <summary>
         /// Starts a drag of the items. objectReferences holds every item's object (sub-assets included, so they can be

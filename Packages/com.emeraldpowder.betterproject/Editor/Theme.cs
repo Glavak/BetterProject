@@ -32,10 +32,10 @@ namespace BetterProject.Editor
         public const string NoHoverClass = "bp-no-hover";
 
         /// <summary>
-        /// Class on the right panel in the dark skin: the theme's row hover colour equals ContentBackground there, so
-        /// BetterProject.uss gives rows / tiles the Hierarchy's hover colour instead.
+        /// Class on the window root in the dark skin: the theme's row hover colour is barely apart from the panel
+        /// backgrounds there, so BetterProject.uss gives rows / tiles the Hierarchy's hover colour instead.
         /// </summary>
-        public const string DarkContentClass = "bp-content-dark";
+        public const string DarkHoverClass = "bp-dark-hover";
 
         static StyleSheet s_StyleSheet;
 
