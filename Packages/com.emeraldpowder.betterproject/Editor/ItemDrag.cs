@@ -83,6 +83,7 @@ namespace BetterProject.Editor
                     }
                 }
                 finally { AssetDatabase.StopAssetEditing(); }
+                BetterProjectWindow.RefreshAllWindows();
             }
             if (import) ImportOutsideFiles(folderPath, outsidePaths);
             return true;
