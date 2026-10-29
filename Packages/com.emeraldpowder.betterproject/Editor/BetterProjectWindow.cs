@@ -589,9 +589,7 @@ namespace BetterProject.Editor
             else
             {
                 _content.DropFolder = currentFolder;
-                var listed = ContentView.ListFolder(currentFolder);
-                MoveDebug.Log("ShowCurrentFolder " + currentFolder + ": " + MoveDebug.Paths(listed));
-                _content.Show(listed);
+                _content.Show(ContentView.ListFolder(currentFolder));
             }
             // Folder view with no folder: say so in the empty panel.
             _content.EmptyMessage = _objectIds == null && (_search == null || !_search.IsActive) && _folders == null
@@ -723,14 +721,10 @@ namespace BetterProject.Editor
 
         void OnProjectChanged()
         {
-            MoveDebug.Log("projectChanged: pending=" + _refreshPending + " content=" + (_content != null)
-                          + " panel=" + (rootVisualElement.panel != null) + " folder=" + currentFolder);
             if (_refreshPending || _content == null) return;
             _refreshPending = true;
             rootVisualElement.schedule.Execute(() =>
             {
-                MoveDebug.Log("refresh run: folder=" + currentFolder + " folders=" + (_folders == null ? "null" : string.Join("|", _folders))
-                              + " objectIds=" + (_objectIds != null) + " search=" + (_search != null && _search.IsActive));
                 _refreshPending = false;
                 if (_content == null) return;
                 string before = currentFolder;
