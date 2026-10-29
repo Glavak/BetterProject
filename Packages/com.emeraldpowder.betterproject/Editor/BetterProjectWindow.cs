@@ -589,7 +589,9 @@ namespace BetterProject.Editor
             else
             {
                 _content.DropFolder = currentFolder;
-                _content.Show(ContentView.ListFolder(currentFolder));
+                var listed = ContentView.ListFolder(currentFolder);
+                MoveDebug.Log("ShowCurrentFolder " + currentFolder + ": " + MoveDebug.Paths(listed));
+                _content.Show(listed);
             }
             // Folder view with no folder: say so in the empty panel.
             _content.EmptyMessage = _objectIds == null && (_search == null || !_search.IsActive) && _folders == null
@@ -719,25 +721,18 @@ namespace BetterProject.Editor
             if (_newAssets != except) _newAssets?.ClearSelection();
         }
 
-        /// <summary>
-        /// Refreshes every open window after assets moved / were deleted. projectChanged alone was seen to miss a drop
-        /// onto the tree in a large project (the moved file stayed in the content view), so moves also come here.
-        /// </summary>
-        internal static void RefreshAllWindows()
-        {
-            foreach (var w in Resources.FindObjectsOfTypeAll<BetterProjectWindow>()) w.OnProjectChanged();
-        }
-
         void OnProjectChanged()
         {
+            MoveDebug.Log("projectChanged: pending=" + _refreshPending + " content=" + (_content != null)
+                          + " panel=" + (rootVisualElement.panel != null) + " folder=" + currentFolder);
             if (_refreshPending || _content == null) return;
             _refreshPending = true;
-            // delayCall, not the panel scheduler: a scheduled item that never runs would leave _refreshPending stuck
-            // and block every later refresh.
-            EditorApplication.delayCall += () =>
+            rootVisualElement.schedule.Execute(() =>
             {
+                MoveDebug.Log("refresh run: folder=" + currentFolder + " folders=" + (_folders == null ? "null" : string.Join("|", _folders))
+                              + " objectIds=" + (_objectIds != null) + " search=" + (_search != null && _search.IsActive));
                 _refreshPending = false;
-                if (this == null || _content == null) return;
+                if (_content == null) return;
                 string before = currentFolder;
                 while (!string.IsNullOrEmpty(currentFolder) && currentFolder != "Packages" && !AssetDatabase.IsValidFolder(currentFolder))
                 {
@@ -758,15 +753,7 @@ namespace BetterProject.Editor
                 ShowCurrentFolder();
                 if (_folders == null) _tree.Reveal(currentFolder); // a multi-selection is restored by Rebuild
                 _content.SyncFromUnitySelection();
-            };
-        }
-    }
-
-    class ProjectMoveTracker : AssetPostprocessor
-    {
-        static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
-        {
-            if (movedAssets.Length > 0 || deletedAssets.Length > 0) BetterProjectWindow.RefreshAllWindows();
+            });
         }
     }
 }

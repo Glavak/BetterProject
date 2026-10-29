@@ -71,6 +71,7 @@ namespace BetterProject.Editor
             }
 
             DragAndDrop.AcceptDrag();
+            MoveDebug.Log("drop on " + folderPath + ": movable=" + string.Join("|", movable) + " import=" + import);
             if (movable.Count > 0)
             {
                 AssetDatabase.StartAssetEditing();
@@ -83,7 +84,9 @@ namespace BetterProject.Editor
                     }
                 }
                 finally { AssetDatabase.StopAssetEditing(); }
-                BetterProjectWindow.RefreshAllWindows();
+                foreach (var src in movable)
+                    MoveDebug.Log("moved " + src + " -> " + folderPath + ": oldGuid='" + AssetDatabase.AssetPathToGUID(src)
+                                  + "' oldOnDisk=" + (File.Exists(src) || Directory.Exists(src)));
             }
             if (import) ImportOutsideFiles(folderPath, outsidePaths);
             return true;

@@ -252,6 +252,8 @@ namespace BetterProject.Editor
             foreach (var it in _items) if (it.InstanceId != 0) resolved.Add(it.InstanceId);
             Selection.Retain(resolved);
             RefreshAll();
+            MoveDebug.Log("ContentView.Show: items=" + _items.Count + " rows=" + _rowSource.Count + " columns=" + _columns
+                          + " listSource=" + (_list.itemsSource?.Count ?? -1) + " panel=" + (panel != null));
         }
 
         /// <summary>Mirror Unity's current selection into this view's highlight state.</summary>
