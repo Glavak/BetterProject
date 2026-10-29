@@ -21,7 +21,6 @@ namespace BetterProject.Editor
         const float TileLabelHeight = 26f;    // two lines of 10px text
         const float ScrollbarAllowance = 16f;
         const float ArrowWidth = 12f;
-        const string GridCellClass = "bp-grid-cell";
         const float DepthIndent = 14f;
 
         // Sub-asset arrows only for items that can hold sub-assets: skip plain text-like files without loading them.
@@ -324,7 +323,8 @@ namespace BetterProject.Editor
             else
             {
                 cell.style.flexDirection = FlexDirection.Column;
-                cell.AddToClassList(GridCellClass); // hover per tile (BetterProject.uss)
+                // Hover per tile in the theme's row hover colour (same as the folder tree, both skins).
+                cell.AddToClassList(BaseVerticalCollectionView.itemUssClassName);
                 cell.style.alignItems = Align.Stretch;
                 cell.style.width = CellWidth;
                 cell.style.height = CellHeight;

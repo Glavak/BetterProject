@@ -157,6 +157,7 @@ namespace BetterProject.Editor
             right.style.flexDirection = FlexDirection.Column;
             right.style.minWidth = 100;
             right.style.backgroundColor = Theme.ContentBackground;
+            right.EnableInClassList(Theme.DarkContentClass, EditorGUIUtility.isProSkin);
             right.Add(_breadcrumbs);
             _content.style.flexGrow = 1;
             right.Add(_content);

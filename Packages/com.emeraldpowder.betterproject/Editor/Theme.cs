@@ -31,6 +31,12 @@ namespace BetterProject.Editor
         /// <summary>Class that turns off the hover highlight inside an element (see BetterProject.uss).</summary>
         public const string NoHoverClass = "bp-no-hover";
 
+        /// <summary>
+        /// Class on the right panel in the dark skin: the theme's row hover colour equals ContentBackground there, so
+        /// BetterProject.uss gives rows / tiles the Hierarchy's hover colour instead.
+        /// </summary>
+        public const string DarkContentClass = "bp-content-dark";
+
         static StyleSheet s_StyleSheet;
 
         /// <summary>The package's BetterProject.uss, found by name so it works wherever the package is installed.</summary>

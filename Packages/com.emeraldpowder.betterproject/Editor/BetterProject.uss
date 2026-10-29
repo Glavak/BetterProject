@@ -1,12 +1,31 @@
-/* "Highlight under mouse" off: rows inside a panel with this class get a transparent hover colour.
-   ListView / TreeView rows (and the Favourites / Recents rows, which share their classes) draw hover with this
-   theme variable; overriding it on the panel affects only that panel. */
-.bp-no-hover {
-    --unity-colors-highlight-background-hover: rgba(0, 0, 0, 0);
+/* Dark skin, right panel: the theme's row hover colour is the panel's own background, so use the Hierarchy's
+   hover colour. Before the .bp-no-hover rule so that one still wins. */
+.bp-content-dark .unity-collection-view__item:hover {
+    background-color: #444444;
 }
 
-/* Icon view: each tile highlights under the mouse (the row's own hover is cleared in code). Uses the same theme
-   variable as rows, so "Highlight under mouse / Right Panel" off (.bp-no-hover) turns it off too. */
-.bp-grid-cell:hover {
-    background-color: var(--unity-colors-highlight-background-hover);
+/* "Highlight under mouse" off: no hover colour on rows inside a panel with this class. Overriding the theme's
+   --unity-colors-highlight-background-hover variable has no effect (the editor theme resolves it), so rows get an
+   explicit transparent background instead. Selected rows keep their highlight: Favourites / Recents / content cells
+   colour it inline (icon-view tiles carry the row class too), the folder tree's is kept by the rules below. */
+.bp-no-hover .unity-collection-view__item:hover {
+    background-color: rgba(0, 0, 0, 0);
+}
+
+/* A selected row looks the same under the mouse (any setting): Unity's theme draws it in the focused colours
+   (blue, white text) on hover even when the list has no focus. Unfocused / focused list. */
+.unity-collection-view .unity-collection-view__item--selected:hover {
+    background-color: var(--unity-colors-highlight-background-inactive);
+}
+
+.unity-collection-view .unity-collection-view__item--selected:hover .unity-label {
+    color: var(--unity-colors-default-text);
+}
+
+.unity-collection-view:focus .unity-collection-view__item--selected:hover {
+    background-color: var(--unity-colors-highlight-background);
+}
+
+.unity-collection-view:focus .unity-collection-view__item--selected:hover .unity-label {
+    color: #FFFFFF;
 }
