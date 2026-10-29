@@ -11,6 +11,11 @@ namespace BetterProject.Editor
     {
         public const string Path = "Project/Better Project";
 
+        // Distance from the page's left edge to every control, so all of them line up in one column like the
+        // Inspector's. Fixed rather than Unity's aligned-field width, which lets long labels push their control out.
+        const float LabelWidth = 250;
+        const float BlockIndent = 15;
+
         public static void Open() => SettingsService.OpenProjectSettings(Path);
 
         [SettingsProvider]
@@ -42,7 +47,7 @@ namespace BetterProject.Editor
                 showInputField = true,
                 tooltip = "Space, in pixels, between the sections of the left panel (Favourites, Recents, folders).",
             };
-            spacing.AddToClassList(BaseField<int>.alignedFieldUssClassName);
+            SetLabelWidth(spacing.labelElement, LabelWidth);
             spacing.RegisterValueChangedCallback(e => s.SidebarSpacing = e.newValue);
             root.Add(spacing);
 
@@ -103,7 +108,7 @@ namespace BetterProject.Editor
             header.style.marginLeft = 3;
             root.Add(header);
             var body = new VisualElement();
-            body.style.paddingLeft = 15;
+            body.style.paddingLeft = BlockIndent;
             root.Add(body);
             return body;
         }
@@ -111,7 +116,7 @@ namespace BetterProject.Editor
         static Toggle Option(VisualElement block, string label, string tooltip, bool value, Action<bool> set)
         {
             var toggle = new Toggle(label) { value = value, tooltip = tooltip };
-            toggle.AddToClassList(BaseField<bool>.alignedFieldUssClassName);
+            SetLabelWidth(toggle.labelElement, LabelWidth - BlockIndent);
             toggle.RegisterValueChangedCallback(e => set(e.newValue));
             block.Add(toggle);
             return toggle;
@@ -121,7 +126,7 @@ namespace BetterProject.Editor
         static void Count(VisualElement block, string label, string tooltip, int value, Action<int> set)
         {
             var field = new IntegerField(label) { value = value, tooltip = tooltip, isDelayed = true };
-            field.AddToClassList(BaseField<int>.alignedFieldUssClassName);
+            SetLabelWidth(field.labelElement, LabelWidth - BlockIndent);
             field.RegisterValueChangedCallback(e =>
             {
                 int v = Mathf.Clamp(e.newValue, 1, BetterProjectSettings.MaxListSize);
@@ -131,7 +136,14 @@ namespace BetterProject.Editor
             block.Add(field);
         }
 
-        // Yellow warning sign after a toggle's checkbox.
+        static void SetLabelWidth(VisualElement label, float width)
+        {
+            label.style.width = width;
+            label.style.minWidth = width;
+            label.style.maxWidth = width;
+        }
+
+        // Yellow warning sign in the block's indent, just left of a toggle's label, so the label stays aligned.
         static void AddWarningIcon(Toggle toggle, string tooltip)
         {
             var icon = new Image
@@ -142,9 +154,11 @@ namespace BetterProject.Editor
             };
             icon.style.width = 16;
             icon.style.height = 16;
-            icon.style.marginLeft = 4;
-            icon.style.alignSelf = Align.Center;
-            toggle.Add(icon);
+            icon.style.position = Position.Absolute;
+            icon.style.left = -17;
+            icon.style.top = Length.Percent(50);
+            icon.style.translate = new Translate(0, Length.Percent(-50));
+            toggle.Insert(0, icon);
         }
     }
 }
