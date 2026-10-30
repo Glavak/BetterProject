@@ -39,6 +39,8 @@ namespace BetterProject.Editor
         [SerializeField] bool recentsOnSceneOpened = true;
         [SerializeField] bool recentsOnAssetImported;
 
+        [SerializeField] bool searchReplaceLayouts = true;
+
         /// <summary>Raised after any setting changed (and was saved).</summary>
         public static event Action Changed;
 
@@ -93,6 +95,9 @@ namespace BetterProject.Editor
         public bool RecentsOnSceneOpened { get => recentsOnSceneOpened; set => Set(ref recentsOnSceneOpened, value); }
         /// <summary>Add to Recents: an asset imported or reimported (new files, changes made outside Unity, saves).</summary>
         public bool RecentsOnAssetImported { get => recentsOnAssetImported; set => Set(ref recentsOnAssetImported, value); }
+
+        /// <summary>Search also looks for the query retyped from other keyboard layouts into US ("руддщ" -> "hello").</summary>
+        public bool SearchReplaceLayouts { get => searchReplaceLayouts; set => Set(ref searchReplaceLayouts, value); }
 
         void Set<T>(ref T field, T value)
         {

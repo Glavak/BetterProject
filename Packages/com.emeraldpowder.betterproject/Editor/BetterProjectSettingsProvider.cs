@@ -25,7 +25,7 @@ namespace BetterProject.Editor
             keywords = new HashSet<string>
             {
                 "Better Project", "Project window", "Sidebar", "Spacing", "Show", "Favourites", "Recents", "Packages",
-                "Highlight", "Hover", "Mouse", "Panel", "Select", "Folders", "Right pane", "Delete", "Confirmation", "Offset", "Padding", "Max recents", "Max new assets", "New assets", "Create", "Plus", "Button", "Asset changed", "Prefab opened", "Scene opened", "Asset imported",
+                "Highlight", "Hover", "Mouse", "Panel", "Select", "Folders", "Right pane", "Delete", "Confirmation", "Offset", "Padding", "Max recents", "Max new assets", "New assets", "Create", "Plus", "Button", "Asset changed", "Prefab opened", "Scene opened", "Asset imported", "Search", "Keyboard", "Layout",
             },
             activateHandler = (search, root) => Build(root, BetterProjectSettings.instance),
         };
@@ -96,6 +96,12 @@ namespace BetterProject.Editor
                 s.RecentsOnSceneOpened, v => s.RecentsOnSceneOpened = v);
             Option(recents, "Asset imported", "An asset is imported or reimported: new files, files changed outside Unity, saved assets.",
                 s.RecentsOnAssetImported, v => s.RecentsOnAssetImported = v);
+
+            var search = Block(root, "Search");
+            Option(search, "Replace non-en layouts",
+                "When there are fewer than 3 results or the query is 5+ characters long, also search for the query " +
+                "retyped from other keyboard layouts into the US one (\"руддщ\" finds \"hello\").",
+                s.SearchReplaceLayouts, v => s.SearchReplaceLayouts = v);
         }
 
         // A bold block title with its options indented below it.

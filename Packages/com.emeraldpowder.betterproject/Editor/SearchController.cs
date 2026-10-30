@@ -77,6 +77,7 @@ namespace BetterProject.Editor
             var paths = new List<string>();
             CollectPaths(query, seen, paths);
             var result = FromPaths(paths);
+            if (!BetterProjectSettings.instance.SearchReplaceLayouts) return result;
             if (result.Count >= LayoutFallbackMaxResults && query.Length < LayoutFallbackMinLength) return result;
 
             var extra = new List<string>();
