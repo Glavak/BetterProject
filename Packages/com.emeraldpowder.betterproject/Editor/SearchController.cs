@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using BetterProject.Core;
 using UnityEditor;
+using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace BetterProject.Editor
@@ -63,16 +65,52 @@ namespace BetterProject.Editor
 
         // ---- data ----
 
+        /// <summary>Few results or a long query: also search the query retyped from other keyboard layouts.</summary>
+        const int LayoutFallbackMaxResults = 3;
+        const int LayoutFallbackMinLength = 5;
+
+        static KeyboardLayouts s_Layouts;
+
         public static List<ContentItem> Search(string query)
         {
-            var guids = AssetDatabase.FindAssets(query, new[] { "Assets" });
-            var paths = new List<string>(guids.Length);
-            foreach (var g in guids)
+            var seen = new HashSet<string>();
+            var paths = new List<string>();
+            CollectPaths(query, seen, paths);
+            var result = FromPaths(paths);
+            if (result.Count >= LayoutFallbackMaxResults && query.Length < LayoutFallbackMinLength) return result;
+
+            var extra = new List<string>();
+            foreach (var variant in Layouts.Variants(query)) CollectPaths(variant, seen, extra);
+            result.AddRange(FromPaths(extra));
+            return result;
+        }
+
+        static void CollectPaths(string query, HashSet<string> seen, List<string> paths)
+        {
+            foreach (var g in AssetDatabase.FindAssets(query, new[] { "Assets" }))
             {
                 string p = AssetDatabase.GUIDToAssetPath(g);
-                if (!string.IsNullOrEmpty(p)) paths.Add(p);
+                if (!string.IsNullOrEmpty(p) && seen.Add(p)) paths.Add(p);
             }
-            return FromPaths(paths);
+        }
+
+        /// <summary>The package's BetterProjectKeyboardLayouts.txt, found by name (install location varies).</summary>
+        static KeyboardLayouts Layouts
+        {
+            get
+            {
+                if (s_Layouts != null) return s_Layouts;
+                string text = null;
+                foreach (var guid in AssetDatabase.FindAssets("BetterProjectKeyboardLayouts t:TextAsset"))
+                {
+                    string path = AssetDatabase.GUIDToAssetPath(guid);
+                    if (!path.EndsWith("/BetterProjectKeyboardLayouts.txt", StringComparison.Ordinal)) continue;
+                    var asset = AssetDatabase.LoadAssetAtPath<TextAsset>(path);
+                    if (asset != null) { text = asset.text; break; }
+                }
+                s_Layouts = KeyboardLayouts.Parse(text);
+                return s_Layouts;
+            }
         }
 
         /// <summary>Items for explicit instance ids (Select Dependencies); sub-assets collapse to their file.</summary>
