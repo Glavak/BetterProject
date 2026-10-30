@@ -198,7 +198,7 @@ namespace BetterProject.Editor
         // ---- tree-styled rows ----
 
         /// <summary>An arrow styled exactly like a TreeView item's expand toggle.</summary>
-        static Toggle MakeToggle()
+        internal static Toggle MakeToggle()
         {
             var t = new Toggle { name = TreeToggleClass, focusable = false };
             t.AddToClassList(Foldout.toggleUssClassName);

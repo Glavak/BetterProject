@@ -14,6 +14,7 @@ namespace BetterProject.Editor
         [SerializeField] bool initialized;          // false only for a newly opened window
         [SerializeField] float splitterWidth = 220;
         [SerializeField] float iconSize; // 0 = list
+        [SerializeField] float tileSize = 64; // the slider value, kept while in list mode
         [SerializeField] List<string> expandedFolders = new List<string>();
         [SerializeField] string searchText = "";
         [SerializeField] bool favouritesCollapsed;
@@ -170,31 +171,48 @@ namespace BetterProject.Editor
             });
             root.Add(split);
 
-            // Bottom bar
+            // Bottom bar, under the content only: the left panel keeps the full height.
             var bottom = new VisualElement();
             bottom.style.flexDirection = FlexDirection.Row;
             bottom.style.justifyContent = Justify.FlexEnd;
             bottom.style.height = 22;
-            bottom.style.flexShrink = 0; // the split above grows; without this a tall panel squeezes the bar
+            bottom.style.flexShrink = 0; // the content above grows; without this a tall panel squeezes the bar
             bottom.style.alignItems = Align.Center;
-            var slider = new Slider(0, 96) { value = ContentView.SnapIconSize(iconSize) };
+            if (iconSize > 0f) tileSize = iconSize;
+            tileSize = Mathf.Clamp(tileSize, 32f, 96f);
+            var slider = new Slider(32, 96) { value = tileSize };
             slider.style.width = 100;
             slider.style.marginRight = 6;
             slider.style.marginTop = slider.style.marginBottom = 0;
             slider.RegisterValueChangedCallback(e =>
             {
-                float snapped = ContentView.SnapIconSize(e.newValue); // (0, 32) snaps to 32
-                if (!Mathf.Approximately(snapped, e.newValue)) slider.SetValueWithoutNotify(snapped);
-                iconSize = snapped;
-                _content.IconSize = snapped;
+                tileSize = Mathf.Clamp(e.newValue, 32f, 96f);
+                iconSize = tileSize;
+                _content.IconSize = tileSize;
             });
             bottom.Add(slider);
+            var listToggle = CreateViewToggle("VerticalLayoutGroup Icon", "List", "List view");
+            var tilesToggle = CreateViewToggle("GridLayoutGroup Icon", "Tiles", "Tile view");
+            void SetViewMode(bool tiles)
+            {
+                iconSize = tiles ? tileSize : 0f;
+                _content.IconSize = iconSize;
+                listToggle.SetValueWithoutNotify(!tiles);
+                tilesToggle.SetValueWithoutNotify(tiles);
+                slider.style.display = tiles ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+            // Radio behaviour: clicking the active button keeps it on.
+            listToggle.RegisterValueChangedCallback(_ => SetViewMode(false));
+            tilesToggle.RegisterValueChangedCallback(_ => SetViewMode(true));
+            SetViewMode(iconSize > 0f);
+            bottom.Add(listToggle);
+            bottom.Add(tilesToggle);
             // The ping listener can only be created inside OnGUI (see PingTracker): a 1 px IMGUI hook does it.
             var pingHook = new IMGUIContainer(PingTracker.EnsureInstalledFromOnGUI);
             pingHook.style.width = 1;
             pingHook.style.height = 1;
             bottom.Add(pingHook);
-            root.Add(bottom);
+            right.Add(bottom);
 
             _tree.FoldersSelected += OnTreeFoldersSelected;
             _content.ItemOpened += OnItemOpened;
@@ -266,6 +284,23 @@ namespace BetterProject.Editor
             // Highlight under mouse.
             _left?.EnableInClassList(Theme.NoHoverClass, !s.HoverLeftPanel);
             _right?.EnableInClassList(Theme.NoHoverClass, !s.HoverRightPanel);
+        }
+
+        static ToolbarToggle CreateViewToggle(string iconName, string fallbackText, string tooltip)
+        {
+            var toggle = new ToolbarToggle { tooltip = tooltip };
+            toggle.style.flexShrink = 0;
+            var texture = EditorGUIUtility.IconContent(iconName).image;
+            if (texture == null)
+            {
+                toggle.text = fallbackText;
+                return toggle;
+            }
+            var icon = new Image { image = texture, scaleMode = ScaleMode.ScaleToFit };
+            icon.style.width = 16;
+            icon.style.height = 16;
+            toggle.Add(icon);
+            return toggle;
         }
 
         // ---- favourites ----

@@ -295,14 +295,23 @@ namespace BetterProject.Editor
             var cell = new VisualElement { name = "cell" };
             var icon = new Image { name = "icon", scaleMode = ScaleMode.ScaleToFit };
             var label = new Label { name = "label" };
-            var arrow = new Label { name = "arrow", text = ">" };
+            // Same arrow as the left panel's tree rows. The toggle only draws (expanded = checked): the clicks go to
+            // the wrapper, which expands on pointer down.
+            var arrow = new VisualElement { name = "arrow" };
+            var arrowToggle = AssetRefSection.MakeToggle();
+            arrowToggle.pickingMode = PickingMode.Ignore;
+            arrowToggle.Query().ForEach(e => e.pickingMode = PickingMode.Ignore);
+            arrowToggle.style.marginLeft = arrowToggle.style.marginRight = 0;
+            arrow.Add(arrowToggle);
             label.style.overflow = Overflow.Hidden;
             label.style.textOverflow = TextOverflow.Ellipsis;
             label.style.marginLeft = label.style.marginRight = label.style.marginTop = label.style.marginBottom = 0;
             arrow.style.width = ArrowWidth;
+            arrow.style.flexShrink = 0; // a long name must not squeeze the arrow column
             arrow.style.marginLeft = arrow.style.marginRight = arrow.style.marginTop = arrow.style.marginBottom = 0;
             arrow.style.paddingLeft = arrow.style.paddingRight = arrow.style.paddingTop = arrow.style.paddingBottom = 0;
-            arrow.style.unityTextAlign = TextAnchor.MiddleCenter;
+            arrow.style.alignItems = Align.Center;
+            arrow.style.justifyContent = Justify.Center;
             arrow.RegisterCallback<PointerDownEvent>(OnArrowPointerDown);
             if (!grid)
             {
@@ -409,10 +418,10 @@ namespace BetterProject.Editor
             cell.Q<Image>("icon").image = tex;
             cell.Q<Label>("label").text = item.Name;
 
-            var arrow = cell.Q<Label>("arrow");
+            var arrow = cell.Q("arrow");
             bool expandable = item.HasSubAssets && !pending;
             arrow.style.visibility = expandable ? Visibility.Visible : Visibility.Hidden;
-            arrow.style.rotate = new Rotate(new Angle(expandable && _expanded.Contains(item.Guid) ? 90f : 0f, AngleUnit.Degree));
+            arrow.Q<Toggle>().SetValueWithoutNotify(expandable && _expanded.Contains(item.Guid));
             if (!grid)
             {
                 // "Remove offset in right panel": no left padding and no reserved arrow column, so icons sit at the
