@@ -224,6 +224,7 @@ namespace BetterProject.Editor
             _newAssets.RowSelected += () => ClearSectionSelection(_newAssets);
             _content.ParentRequested += () => NavigateTo(AssetPaths.Parent(currentFolder));
             _content.ContextRequested += pos => AssetsContextMenu.Show(this, pos);
+            _tree.ContextRequested += pos => AssetsContextMenu.Show(this, pos);
 
             root.RegisterCallback<ValidateCommandEvent>(OnValidateCommand);
             root.RegisterCallback<ExecuteCommandEvent>(OnExecuteCommand);
@@ -247,6 +248,8 @@ namespace BetterProject.Editor
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
             FavouritesStore.Changed -= OnFavouritesChanged;
             FavouritesStore.Changed += OnFavouritesChanged;
+            ItemDrag.Dropped -= OnDropped;
+            ItemDrag.Dropped += OnDropped;
             RecentsStore.Changed -= OnRecentsChanged;
             RecentsStore.Changed += OnRecentsChanged;
             NewAssetsStore.Changed -= OnNewAssetsChanged;
@@ -437,6 +440,7 @@ namespace BetterProject.Editor
             Selection.selectionChanged -= OnSelectionChanged;
             AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
             FavouritesStore.Changed -= OnFavouritesChanged;
+            ItemDrag.Dropped -= OnDropped;
             RecentsStore.Changed -= OnRecentsChanged;
             NewAssetsStore.Changed -= OnNewAssetsChanged;
             BetterProjectSettings.Changed -= OnSettingsChanged;
@@ -787,29 +791,42 @@ namespace BetterProject.Editor
             _refreshPending = true;
             rootVisualElement.schedule.Execute(() =>
             {
-                _refreshPending = false;
-                if (_content == null) return;
-                string before = currentFolder;
-                while (!string.IsNullOrEmpty(currentFolder) && currentFolder != "Packages" && !AssetDatabase.IsValidFolder(currentFolder))
-                {
-                    string parent = AssetPaths.Parent(currentFolder);
-                    currentFolder = parent.Length > 0 ? parent : "Assets";
-                }
-                if (currentFolder != before) AssetsContextMenu.OnWindowFolderChanged(this); // the proxy follows the fallback
-                if (_folders != null)
-                {
-                    _folders.RemoveAll(f => f != "Packages" && !AssetDatabase.IsValidFolder(f));
-                    if (_folders.Count <= 1 || !_folders.Contains(currentFolder)) _folders = null; // back to one folder
-                }
-                _tree.Rebuild();
-                _favourites?.Rebuild(); // renamed / moved / deleted favourites
-                _recents?.Rebuild(); // renamed / moved recents (deleted ones are dropped by RecentsStore)
-                _newAssets?.Rebuild();
-                _content.InvalidateSubAssetCache();
-                ShowCurrentFolder();
-                if (_folders == null) _tree.Reveal(currentFolder); // a multi-selection is restored by Rebuild
-                _content.SyncFromUnitySelection();
+                if (_refreshPending) RefreshFromProject();
             });
+        }
+
+        void OnDropped()
+        {
+            if (_content == null) return;
+            RefreshFromProject();
+            Repaint();
+        }
+
+        /// <summary>Rebuilds every panel from the asset database (assets added, moved, renamed or deleted).</summary>
+        void RefreshFromProject()
+        {
+            _refreshPending = false;
+            if (_content == null) return;
+            string before = currentFolder;
+            while (!string.IsNullOrEmpty(currentFolder) && currentFolder != "Packages" && !AssetDatabase.IsValidFolder(currentFolder))
+            {
+                string parent = AssetPaths.Parent(currentFolder);
+                currentFolder = parent.Length > 0 ? parent : "Assets";
+            }
+            if (currentFolder != before) AssetsContextMenu.OnWindowFolderChanged(this); // the proxy follows the fallback
+            if (_folders != null)
+            {
+                _folders.RemoveAll(f => f != "Packages" && !AssetDatabase.IsValidFolder(f));
+                if (_folders.Count <= 1 || !_folders.Contains(currentFolder)) _folders = null; // back to one folder
+            }
+            _tree.Rebuild();
+            _favourites?.Rebuild(); // renamed / moved / deleted favourites
+            _recents?.Rebuild(); // renamed / moved recents (deleted ones are dropped by RecentsStore)
+            _newAssets?.Rebuild();
+            _content.InvalidateSubAssetCache();
+            ShowCurrentFolder();
+            if (_folders == null) _tree.Reveal(currentFolder); // a multi-selection is restored by Rebuild
+            _content.SyncFromUnitySelection();
         }
     }
 }

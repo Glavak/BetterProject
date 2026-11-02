@@ -38,6 +38,12 @@ namespace BetterProject.Editor
         /// </summary>
         public event Action<IReadOnlyList<string>, string> FoldersSelected;
 
+        /// <summary>
+        /// Right click on a folder row: the row is selected (if it was not), Unity's selection set to the selected
+        /// folders; the window shows the Assets menu at the given position.
+        /// </summary>
+        public event Action<Vector2> ContextRequested;
+
         /// <param name="expandedFolders">Serialized list owned by the window; kept in sync with expand state.</param>
         public FolderTree(List<string> expandedFolders)
         {
@@ -220,6 +226,8 @@ namespace BetterProject.Editor
             label.style.whiteSpace = WhiteSpace.NoWrap;
             row.Add(icon);
             row.Add(label);
+            row.RegisterCallback<PointerDownEvent>(e => { if (ContentView.IsContextClick(e, true)) OnRowContextClick(e); });
+            row.RegisterCallback<PointerUpEvent>(e => { if (ContentView.IsContextClick(e, false)) OnRowContextClick(e); });
             row.RegisterCallback<DragUpdatedEvent>(OnRowDragUpdated);
             row.RegisterCallback<DragPerformEvent>(OnRowDragPerform);
             row.RegisterCallback<DragLeaveEvent>(e => ClearDropHighlight((VisualElement)e.currentTarget));
@@ -256,12 +264,39 @@ namespace BetterProject.Editor
                 label.style.unityFontStyleAndWeight = FontStyle.Normal;
                 return;
             }
-            bool open = _tree.IsExpanded(_tree.GetIdForIndex(index));
-            icon.image = EditorGUIUtility.IconContent(open ? "FolderOpened Icon" : "Folder Icon").image;
+            icon.image = FolderIcon(node.Path, _tree.IsExpanded(_tree.GetIdForIndex(index)));
             label.text = node.Display;
             // Roots are bold, as in Unity's Project window.
             bool root = node.Path == AssetsRoot || node.Path == PackagesRoot;
             label.style.unityFontStyleAndWeight = root ? FontStyle.Bold : FontStyle.Normal;
+        }
+
+        // Unity's cached icon tells empty folders apart ("FolderEmpty Icon"), as in the content panel.
+        static Texture FolderIcon(string path, bool open)
+        {
+            if (open) return EditorGUIUtility.IconContent("FolderOpened Icon").image;
+            var icon = path == PackagesRoot ? null : AssetDatabase.GetCachedIcon(path);
+            return icon != null ? icon : EditorGUIUtility.IconContent("Folder Icon").image;
+        }
+
+        // ---- context menu ----
+
+        void OnRowContextClick(IPointerEvent evt)
+        {
+            var row = (VisualElement)((EventBase)evt).currentTarget;
+            ((EventBase)evt).StopPropagation();
+            if (!(row.userData is string path)) return;
+            // Like Unity's Project window: a right click outside the selection selects that folder alone.
+            if (!_selectedPaths.Contains(path) && _ids.TryGetValue(path, out int id)) _tree.SetSelectionById(id);
+            // Menu commands act on Unity's selection: the selected folders (the Packages root is not an asset).
+            var ids = new List<int>();
+            foreach (var p in _selectedPaths)
+            {
+                int iid = p == PackagesRoot ? 0 : Internal.UnityInternals.GetMainAssetInstanceID(p);
+                if (iid != 0) ids.Add(iid);
+            }
+            UnityEditor.Selection.instanceIDs = ids.ToArray();
+            ContextRequested?.Invoke(evt.position);
         }
 
         // ---- drop targets ----

@@ -48,6 +48,19 @@ namespace BetterProject.Editor
         /// </summary>
         public static bool HandleDropOnFolder(string folderPath, bool perform)
         {
+            bool done = HandleDrop(folderPath, perform);
+            if (done && perform) Dropped?.Invoke();
+            return done;
+        }
+
+        /// <summary>
+        /// Raised after a drop was performed. Windows refresh at once: projectChanged handling is deferred to the next
+        /// editor tick, which doesn't come while Unity is in the background (files dropped from Finder / Explorer).
+        /// </summary>
+        public static event Action Dropped;
+
+        static bool HandleDrop(string folderPath, bool perform)
+        {
             var projectPaths = new List<string>();
             var outsidePaths = new List<string>();
             SplitPaths(DragAndDrop.paths, projectPaths, outsidePaths);
