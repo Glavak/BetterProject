@@ -91,7 +91,7 @@ namespace BetterProject.Editor
                 _search.SetQuery(searchText);
                 // Left "Selected objects" with a query that trims to empty: no search will replace the stale
                 // object-list results, so show the folder now (SetQuery raises Cleared only when a search was active).
-                if (wasObjects && !_search.IsActive) { ShowCurrentFolder(); _content.SyncFromUnitySelection(); }
+                if (wasObjects && !_search.IsActive) LeaveResults();
             });
             // Esc clears the field (and leaves it when already empty). Trickle-down so the inner text field never sees it.
             _searchField.RegisterCallback<KeyDownEvent>(e =>
@@ -99,10 +99,10 @@ namespace BetterProject.Editor
                 if (e.keyCode != KeyCode.Escape) return;
                 e.StopPropagation();
                 if (!string.IsNullOrEmpty(_searchField.value)) _searchField.value = "";
-                else if (_objectIds != null) { ClearSearch(); ShowCurrentFolder(); _content.SyncFromUnitySelection(); }
+                else if (_objectIds != null) LeaveResults();
                 else { _searchField.Blur(); _content?.Focus(); }
             }, TrickleDown.TrickleDown);
-            _objectsButton = new Button(() => { ClearSearch(); ShowCurrentFolder(); _content.SyncFromUnitySelection(); })
+            _objectsButton = new Button(LeaveResults)
             {
                 name = "objects-chip",
                 tooltip = "Showing the objects listed by Select Dependencies. Click to return to the folder.",
@@ -125,7 +125,7 @@ namespace BetterProject.Editor
             root.Add(toolbar);
             _search = new SearchController(root);
             _search.ResultsReady += OnSearchResults;
-            _search.Cleared += () => { if (_content != null) { ShowCurrentFolder(); _content.SyncFromUnitySelection(); } };
+            _search.Cleared += () => { if (_content != null) LeaveResults(); };
 
             // Split view
             if (expandedFolders == null) expandedFolders = new List<string>();
@@ -640,18 +640,44 @@ namespace BetterProject.Editor
         /// </summary>
         static string PickInitialFolder()
         {
-            var active = Selection.activeObject;
-            string path = active != null ? AssetDatabase.GetAssetPath(active) : null; // sub-assets: the main asset's path
-            if (!string.IsNullOrEmpty(path) && AssetPaths.IsProjectAssetPath(path))
-            {
-                string parent = AssetPaths.Parent(path);
-                if (parent == "Packages" || AssetDatabase.IsValidFolder(parent)) return parent;
-                if (path == "Assets") return path;
-            }
+            string selected = SelectionFolder();
+            if (selected != null) return selected;
             if (UnityInternals.TryGetProjectWindowFolder(out string folder)
                 && (folder == "Packages" || AssetDatabase.IsValidFolder(folder)))
                 return folder;
             return "";
+        }
+
+        /// <summary>Folder that shows Unity's active selection (the root itself for "Assets"); null if not a project asset.</summary>
+        static string SelectionFolder()
+        {
+            var active = Selection.activeObject;
+            string path = active != null ? AssetDatabase.GetAssetPath(active) : null; // sub-assets: the main asset's path
+            if (string.IsNullOrEmpty(path) || !AssetPaths.IsProjectAssetPath(path)) return null;
+            string parent = AssetPaths.Parent(path);
+            if (parent == "Packages" || AssetDatabase.IsValidFolder(parent)) return parent;
+            return path == "Assets" ? path : null;
+        }
+
+        /// <summary>
+        /// Leaves search / object-list results, as Unity's Project window does: shows the folder of the asset selected
+        /// (e.g. picked among the results) and scrolls to it; with no asset selected, the folder shown before.
+        /// </summary>
+        void LeaveResults()
+        {
+            string folder = SelectionFolder();
+            bool navigated = false;
+            if (folder != null && (folder != currentFolder || _folders != null))
+            {
+                NavigateTo(folder);
+                navigated = currentFolder == folder && _folders == null; // NavigateTo refuses folders it can't show
+            }
+            if (!navigated)
+            {
+                ClearSearch();
+                ShowCurrentFolder();
+            }
+            RevealSelection();
         }
 
         void OnTreeFoldersSelected(IReadOnlyList<string> paths, string primary)
