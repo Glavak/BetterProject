@@ -119,6 +119,8 @@ namespace BetterProject.Editor
                     if (_ids.TryGetValue(p, out int sid) && _built.Contains(sid)) ids.Add(sid);
                 if (ids.Count > 0) _tree.SetSelectionById(ids);
                 UpdateHeight();
+                RefreshLog.Write("tree rebuilt: " + _tree.viewController.GetItemsCount() + " rows, expanded=["
+                                 + string.Join(", ", _expanded) + "], selected=[" + string.Join(", ", _selectedPaths) + "]");
             }
             finally { _busy = false; }
         }

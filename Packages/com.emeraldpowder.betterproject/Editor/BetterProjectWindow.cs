@@ -54,6 +54,7 @@ namespace BetterProject.Editor
 
         void CreateGUI()
         {
+            _refreshPending = false; // a refresh scheduled on a previous UI would never run and block all later ones
             titleContent = new GUIContent("Better Project");
             var root = rootVisualElement;
             root.Clear();
@@ -488,6 +489,8 @@ namespace BetterProject.Editor
                 if (done) return;
                 done = true;
                 string created = AssetsContextMenu.CompleteCreate(folder, pending, name); // empty name → default name
+                RefreshLog.Write("created '" + created + "' in '" + folder + "' (current=" + currentFolder
+                                 + ", valid folder=" + (created != null && AssetDatabase.IsValidFolder(created)) + ")");
                 if (created == null || this == null || _content == null) return; // window may have closed (deferred commit)
                 if (folder == currentFolder)
                 {
@@ -787,10 +790,13 @@ namespace BetterProject.Editor
 
         void OnProjectChanged()
         {
+            RefreshLog.Write("projectChanged (pending=" + _refreshPending + ", content=" + (_content != null)
+                             + ", panel=" + (rootVisualElement.panel != null) + ")");
             if (_refreshPending || _content == null) return;
             _refreshPending = true;
             rootVisualElement.schedule.Execute(() =>
             {
+                RefreshLog.Write("scheduled refresh runs (pending=" + _refreshPending + ")");
                 if (_refreshPending) RefreshFromProject();
             });
         }
@@ -806,6 +812,7 @@ namespace BetterProject.Editor
         void RefreshFromProject()
         {
             _refreshPending = false;
+            RefreshLog.Write("RefreshFromProject (folder=" + currentFolder + ", folders=" + (_folders?.Count ?? 0) + ")");
             if (_content == null) return;
             string before = currentFolder;
             while (!string.IsNullOrEmpty(currentFolder) && currentFolder != "Packages" && !AssetDatabase.IsValidFolder(currentFolder))
@@ -827,6 +834,17 @@ namespace BetterProject.Editor
             ShowCurrentFolder();
             if (_folders == null) _tree.Reveal(currentFolder); // a multi-selection is restored by Rebuild
             _content.SyncFromUnitySelection();
+        }
+    }
+
+    /// <summary>Temporary diagnostics for panels not refreshing after asset changes. Set Enabled = false to silence.</summary>
+    static class RefreshLog
+    {
+        internal const bool Enabled = true;
+
+        internal static void Write(string message)
+        {
+            if (Enabled) Debug.Log("[Better Project][refresh] " + message);
         }
     }
 }
