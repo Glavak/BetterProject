@@ -43,5 +43,16 @@ namespace BetterProject.Core.Tests
             Assert.IsFalse(AssetPaths.CanMoveInto("Library/x", "Assets/B"));
             Assert.IsFalse(AssetPaths.CanMoveInto("Assets/A", "ProjectSettings"));
         }
+        [Test] public void IsImportedName_Cases()
+        {
+            Assert.IsTrue(AssetPaths.IsImportedName("Hero.png"));
+            Assert.IsTrue(AssetPaths.IsImportedName("Art"));
+            Assert.IsFalse(AssetPaths.IsImportedName("Hero.png.meta"));
+            Assert.IsFalse(AssetPaths.IsImportedName(".DS_Store"));
+            Assert.IsFalse(AssetPaths.IsImportedName("Backup~"));
+            Assert.IsFalse(AssetPaths.IsImportedName("CVS"));
+            Assert.IsFalse(AssetPaths.IsImportedName("scratch.tmp"));
+            Assert.IsFalse(AssetPaths.IsImportedName(""));
+        }
     }
 }

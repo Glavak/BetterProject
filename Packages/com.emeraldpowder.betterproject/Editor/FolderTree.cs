@@ -266,19 +266,11 @@ namespace BetterProject.Editor
                 label.style.unityFontStyleAndWeight = FontStyle.Normal;
                 return;
             }
-            icon.image = FolderIcon(node.Path, _tree.IsExpanded(_tree.GetIdForIndex(index)));
+            icon.image = Thumbnails.FolderIcon(node.Path, _tree.IsExpanded(_tree.GetIdForIndex(index)));
             label.text = node.Display;
             // Roots are bold, as in Unity's Project window.
             bool root = node.Path == AssetsRoot || node.Path == PackagesRoot;
             label.style.unityFontStyleAndWeight = root ? FontStyle.Bold : FontStyle.Normal;
-        }
-
-        // Unity's cached icon tells empty folders apart ("FolderEmpty Icon"), as in the content panel.
-        static Texture FolderIcon(string path, bool open)
-        {
-            if (open) return EditorGUIUtility.IconContent("FolderOpened Icon").image;
-            var icon = path == PackagesRoot ? null : AssetDatabase.GetCachedIcon(path);
-            return icon != null ? icon : EditorGUIUtility.IconContent("Folder Icon").image;
         }
 
         // ---- context menu ----

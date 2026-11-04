@@ -43,5 +43,17 @@ namespace BetterProject.Core
             if (string.Equals(Parent(sourcePath), targetFolder, StringComparison.OrdinalIgnoreCase)) return false;
             return true;
         }
+
+        /// <summary>
+        /// True if a file or folder with this name is an asset Unity imports: not a .meta file and not one of the names
+        /// Unity hides (starting with '.', ending with '~', "cvs", "*.tmp").
+        /// </summary>
+        public static bool IsImportedName(string name)
+        {
+            if (string.IsNullOrEmpty(name) || name[0] == '.' || name[name.Length - 1] == '~') return false;
+            if (string.Equals(name, "cvs", StringComparison.OrdinalIgnoreCase)) return false;
+            if (name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)) return false;
+            return !name.EndsWith(".meta", StringComparison.OrdinalIgnoreCase);
+        }
     }
 }

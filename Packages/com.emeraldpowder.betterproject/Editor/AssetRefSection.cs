@@ -426,9 +426,7 @@ namespace BetterProject.Editor
                 var obj = EditorUtility.InstanceIDToObject(row.InstanceId);
                 return obj != null ? AssetPreview.GetMiniThumbnail(obj) : null;
             }
-            var icon = AssetDatabase.GetCachedIcon(row.Path);
-            if (icon == null && row.IsFolder) icon = EditorGUIUtility.IconContent("Folder Icon").image;
-            return icon;
+            return row.IsFolder ? Thumbnails.FolderIcon(row.Path, false) : AssetDatabase.GetCachedIcon(row.Path);
         }
 
         void ToggleExpand(string path)
