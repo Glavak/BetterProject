@@ -55,6 +55,10 @@ namespace BetterProject.Editor
         void CreateGUI()
         {
             _refreshPending = false; // a refresh scheduled on a previous UI would never run and block all later ones
+            // Not serialized: a domain reload drops them anyway. A UI rebuilt without one (e.g. after a reimport) would
+            // otherwise keep showing results with no chip to leave them and a tree showing one folder.
+            _objectIds = null;
+            _folders = null;
             titleContent = new GUIContent("Better Project");
             var root = rootVisualElement;
             root.Clear();
@@ -623,10 +627,19 @@ namespace BetterProject.Editor
             UpdateBreadcrumbs();
             // Create puts the asset in the current folder (also while results are shown): only where it can be written.
             _createButton?.SetEnabled(!string.IsNullOrEmpty(currentFolder) && AssetsContextMenu.IsWritableFolder(currentFolder));
-            if (_objectIds != null)
+            List<ContentItem> objects = _objectIds != null ? SearchController.FromInstanceIds(_objectIds) : null;
+            if (objects != null && objects.Count == 0)
+            {
+                // Every listed object is gone (deleted, or ids stale after a reimport): back to the folder.
+                _objectIds = null;
+                UpdateObjectsChip();
+                UpdateBreadcrumbs();
+                objects = null;
+            }
+            if (objects != null)
             {
                 _content.DropFolder = null; // results are not a folder: drops on empty space are rejected
-                _content.Show(SearchController.FromInstanceIds(_objectIds));
+                _content.Show(objects);
             }
             else if (_search != null && _search.IsActive)
             {

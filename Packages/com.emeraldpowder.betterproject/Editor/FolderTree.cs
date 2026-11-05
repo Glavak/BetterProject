@@ -228,7 +228,11 @@ namespace BetterProject.Editor
             label.style.whiteSpace = WhiteSpace.NoWrap;
             row.Add(icon);
             row.Add(label);
-            row.RegisterCallback<PointerDownEvent>(e => { if (ContentView.IsContextClick(e, true)) OnRowContextClick(e); });
+            row.RegisterCallback<PointerDownEvent>(e =>
+            {
+                if (ContentView.IsContextClick(e, true)) OnRowContextClick(e);
+                else if (e.button == 0 && !e.shiftKey && !e.actionKey) OnRowClick(e);
+            });
             row.RegisterCallback<PointerUpEvent>(e => { if (ContentView.IsContextClick(e, false)) OnRowContextClick(e); });
             row.RegisterCallback<DragUpdatedEvent>(OnRowDragUpdated);
             row.RegisterCallback<DragPerformEvent>(OnRowDragPerform);
@@ -271,6 +275,14 @@ namespace BetterProject.Editor
             // Roots are bold, as in Unity's Project window.
             bool root = node.Path == AssetsRoot || node.Path == PackagesRoot;
             label.style.unityFontStyleAndWeight = root ? FontStyle.Bold : FontStyle.Normal;
+        }
+
+        // A click on the only selected folder changes no selection, so the tree raises nothing: report it, so the
+        // window can leave search / "Selected objects" results back to that folder.
+        void OnRowClick(PointerDownEvent evt)
+        {
+            if (!(((VisualElement)evt.currentTarget).userData is string path)) return;
+            if (_selectedPaths.Count == 1 && _selectedPaths[0] == path) FoldersSelected?.Invoke(_selectedPaths.ToArray(), path);
         }
 
         // ---- context menu ----
