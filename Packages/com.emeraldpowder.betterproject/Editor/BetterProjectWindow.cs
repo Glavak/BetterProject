@@ -317,7 +317,10 @@ namespace BetterProject.Editor
             section.FolderOpened += OnFolderClicked;
             section.ItemOpened += OnItemOpened;
             section.FillContextMenu = (entry, menu) =>
+            {
+                AddOpenFolderItem(entry, menu);
                 menu.AddItem(new GUIContent("Remove from Favourites"), false, () => FavouritesStore.Remove(entry.Ref));
+            };
             section.HandleDrop = HandleFavouritesDrop;
             section.EmptyText = "Drag to add";
             UpdateFavouritesWarning(section);
@@ -369,7 +372,10 @@ namespace BetterProject.Editor
             section.FolderOpened += OnFolderClicked;
             section.ItemOpened += OnItemOpened;
             section.FillContextMenu = (entry, menu) =>
+            {
+                AddOpenFolderItem(entry, menu);
                 menu.AddItem(new GUIContent("Remove from Recents"), false, () => RecentsStore.Remove(entry.Ref));
+            };
             section.FillHeaderContextMenu = menu =>
             {
                 if (RecentsStore.List.Items.Count > 0) menu.AddItem(new GUIContent("Clear Recents"), false, RecentsStore.Clear);
@@ -400,7 +406,10 @@ namespace BetterProject.Editor
             section.FolderOpened += OnFolderClicked;
             section.ItemOpened += OnItemOpened;
             section.FillContextMenu = (entry, menu) =>
+            {
+                AddOpenFolderItem(entry, menu);
                 menu.AddItem(new GUIContent("Remove from New assets"), false, () => NewAssetsStore.Remove(entry.Ref));
+            };
             section.FillHeaderContextMenu = menu =>
             {
                 if (NewAssetsStore.List.Items.Count > 0) menu.AddItem(new GUIContent("Clear New assets"), false, NewAssetsStore.Clear);
@@ -419,6 +428,15 @@ namespace BetterProject.Editor
         }
 
         void OnNewAssetsChanged() => _newAssets?.Rebuild();
+
+        // "Open folder": shows the folder containing the entry and flashes the entry there (a ping: selection kept).
+        void AddOpenFolderItem(RefSectionEntry entry, GenericMenu menu)
+        {
+            string path = AssetRefUtil.PathOf(entry.Ref);
+            var content = new GUIContent("Open folder");
+            if (path == null || AssetPaths.Parent(path).Length == 0) { menu.AddDisabledItem(content); return; }
+            menu.AddItem(content, false, () => PingAsset(path));
+        }
 
         static void UpdateFavouritesWarning(AssetRefSection section) =>
             section.SetWarning(FavouritesStore.LoadFailed ? "Favourites file unreadable: " + FavouritesStore.LoadError : null);

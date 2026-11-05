@@ -26,6 +26,23 @@ namespace BetterProject.Core.Tests
             Assert.IsFalse(RecentsFilter.IsEditWindow(null));
             Assert.IsFalse(RecentsFilter.IsEditWindow(""));
         }
+        [Test] public void IsEditWindow_FieldPickers_True()
+        {
+            Assert.IsTrue(RecentsFilter.IsEditWindow("UnityEditor.ObjectSelector"));
+            Assert.IsTrue(RecentsFilter.IsEditWindow("UnityEditor.ColorPicker"));
+            Assert.IsTrue(RecentsFilter.IsEditWindow("UnityEditor.GradientPicker"));
+            Assert.IsTrue(RecentsFilter.IsEditWindow("UnityEditor.CurveEditorWindow"));
+        }
+        [Test] public void ShouldRecordEdit_DropOntoInspector_True()
+        {
+            // Drag from a project window onto an Inspector field: focus stays on the source window.
+            Assert.IsTrue(RecentsFilter.ShouldRecordEdit("BetterProject.Editor.BetterProjectWindow", "UnityEditor.InspectorWindow", "Assets/M.mat"));
+        }
+        [Test] public void ShouldRecordEdit_MouseOverOtherWindow_False()
+        {
+            Assert.IsFalse(RecentsFilter.ShouldRecordEdit("Other.Editor.SomeWindow", "UnityEditor.SceneView", "Assets/M.mat"));
+            Assert.IsFalse(RecentsFilter.ShouldRecordEdit(null, "UnityEditor.ObjectSelector", "Assets/M.mat")); // pickers count only focused
+        }
         [Test] public void ShouldRecordEdit_NullWindow_False() => Assert.IsFalse(RecentsFilter.ShouldRecordEdit(null, "Assets/M.mat"));
         [Test] public void ShouldRecordEdit_ProjectSettings_False() => Assert.IsFalse(RecentsFilter.ShouldRecordEdit("UnityEditor.InspectorWindow", "ProjectSettings/TagManager.asset"));
     }
