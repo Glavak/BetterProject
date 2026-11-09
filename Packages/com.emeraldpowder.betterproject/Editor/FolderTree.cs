@@ -12,6 +12,7 @@ namespace BetterProject.Editor
         const string AssetsRoot = "Assets";
         const string PackagesRoot = "Packages";
         static readonly Color DropColor = ItemDrag.DropColor;
+        const float DragThreshold = 5f;
 
         sealed class Node
         {
@@ -32,6 +33,9 @@ namespace BetterProject.Editor
         bool _showPackages = BetterProjectSettings.instance.ShowPackages;
         float _rootSpacing = Theme.SectionSpacing; // gap above the Packages root
         readonly List<string> _selectedPaths = new List<string>(); // tree selection, kept across rebuilds
+        string _dragPath; // folder pressed with the left button, armed to start a drag; null = not armed
+        int _dragPointer = -1;
+        Vector2 _dragStart;
 
         /// <summary>
         /// The user changed the tree selection: all selected folders (tree order) and the one just clicked (primary).
@@ -74,6 +78,9 @@ namespace BetterProject.Editor
             _tree.itemExpandedChanged += OnExpandedChanged;
             _tree.selectedIndicesChanged += OnSelectedIndicesChanged;
             Add(_tree);
+            // On the whole tree, not the row: the pointer leaves the pressed row before the threshold on a fast drag.
+            RegisterCallback<PointerMoveEvent>(OnPointerMove);
+            RegisterCallback<PointerUpEvent>(_ => DisarmDrag());
             Rebuild();
         }
 
@@ -230,8 +237,13 @@ namespace BetterProject.Editor
             row.Add(label);
             row.RegisterCallback<PointerDownEvent>(e =>
             {
+                DisarmDrag();
                 if (ContentView.IsContextClick(e, true)) OnRowContextClick(e);
-                else if (e.button == 0 && !e.shiftKey && !e.actionKey) OnRowClick(e);
+                else if (e.button == 0)
+                {
+                    ArmDrag(e);
+                    if (!e.shiftKey && !e.actionKey) OnRowClick(e);
+                }
             });
             row.RegisterCallback<PointerUpEvent>(e => { if (ContentView.IsContextClick(e, false)) OnRowContextClick(e); });
             row.RegisterCallback<DragUpdatedEvent>(OnRowDragUpdated);
@@ -303,6 +315,43 @@ namespace BetterProject.Editor
             }
             UnityEditor.Selection.instanceIDs = ids.ToArray();
             ContextRequested?.Invoke(evt.position);
+        }
+
+        // ---- dragging out ----
+
+        void ArmDrag(PointerDownEvent evt)
+        {
+            if (!(((VisualElement)evt.currentTarget).userData is string path) || path == PackagesRoot) return;
+            _dragPath = path;
+            _dragPointer = evt.pointerId;
+            _dragStart = evt.position;
+        }
+
+        void DisarmDrag()
+        {
+            _dragPath = null;
+            _dragPointer = -1;
+        }
+
+        // Past the threshold: drags the selected folders if the pressed one is among them (tree order), else it alone.
+        void OnPointerMove(PointerMoveEvent evt)
+        {
+            if (_dragPath == null || evt.pointerId != _dragPointer) return;
+            if ((evt.pressedButtons & 1) == 0) { DisarmDrag(); return; }
+            if (((Vector2)evt.position - _dragStart).magnitude <= DragThreshold) return;
+            string pressed = _dragPath;
+            DisarmDrag();
+            evt.StopPropagation();
+            var paths = _selectedPaths.Contains(pressed) ? (IReadOnlyList<string>)_selectedPaths : new[] { pressed };
+            var items = new List<ContentItem>();
+            foreach (var p in paths)
+            {
+                if (p == PackagesRoot) continue; // not an asset
+                string guid = AssetDatabase.AssetPathToGUID(p);
+                if (string.IsNullOrEmpty(guid)) continue;
+                items.Add(new ContentItem { Path = p, Guid = guid, IsFolder = true, Name = p.Substring(p.LastIndexOf('/') + 1) });
+            }
+            if (items.Count > 0) ItemDrag.StartDrag(items);
         }
 
         // ---- drop targets ----
