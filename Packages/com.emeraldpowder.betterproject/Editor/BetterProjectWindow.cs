@@ -15,6 +15,8 @@ namespace BetterProject.Editor
         [SerializeField] float splitterWidth = 220;
         [SerializeField] float iconSize; // 0 = list
         [SerializeField] float tileSize = 64; // the slider value, kept while in list mode
+        [SerializeField] bool detailsView;    // list mode as a table (iconSize 0)
+        [SerializeField] string detailsColumns = ""; // DetailsColumns.Serialize(); "" = default columns
         [SerializeField] List<string> expandedFolders = new List<string>();
         [SerializeField] string searchText = "";
         [SerializeField] bool favouritesCollapsed;
@@ -31,8 +33,11 @@ namespace BetterProject.Editor
         ContentView _content;
         Breadcrumbs _breadcrumbs;
         VisualElement _left;
+        VisualElement _pinned;   // pinned sections, above the left panel's scroll area
+        VisualElement _sections; // the other sections, in the scroll area above the folder tree
         VisualElement _right;
         bool _refreshPending;
+        bool? _shownFileExtensions; // last applied "Show file extensions"; section labels are built with it
         SearchController _search;
         ToolbarSearchField _searchField;
         Button _objectsButton;
@@ -135,17 +140,29 @@ namespace BetterProject.Editor
             // Split view
             if (expandedFolders == null) expandedFolders = new List<string>();
             _tree = new FolderTree(expandedFolders);
-            _content = new ContentView { IconSize = iconSize };
+            _content = new ContentView { IconSize = iconSize, DetailsLayout = DetailsColumns.Parse(detailsColumns) };
+            _content.DetailsLayoutChanged += () => detailsColumns = _content.DetailsLayout.Serialize();
             var split = new TwoPaneSplitView(0, Mathf.Max(100f, splitterWidth), TwoPaneSplitViewOrientation.Horizontal);
             split.style.flexGrow = 1;
             // Left panel = Favourites, Recents and (optional) New assets sections above the folder tree, all at full
-            // height in one ScrollView: a single scrollbar for the whole panel.
-            var left = new ScrollView(ScrollViewMode.Vertical);
+            // height in one ScrollView: a single scrollbar for the whole panel. Pinned sections ("Pin on top") sit
+            // above that ScrollView instead and never scroll (ApplySettings moves them).
+            var left = new VisualElement();
             _left = left;
-            left.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
-            left.verticalScroller.valueChanged += _ => FullNameOverlay.Hide();
+            left.style.flexDirection = FlexDirection.Column;
             left.style.minWidth = 100;
-            var sections = new VisualElement { name = "sections" };
+            left.style.overflow = Overflow.Hidden; // pinned sections taller than the panel are cut, not drawn over
+            _pinned = new VisualElement { name = "pinned" };
+            _pinned.style.flexDirection = FlexDirection.Column;
+            _pinned.style.flexShrink = 0;
+            _pinned.style.borderBottomColor = Theme.Separator;
+            left.Add(_pinned);
+            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.style.flexGrow = 1;
+            scroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+            scroll.verticalScroller.valueChanged += _ => FullNameOverlay.Hide();
+            left.Add(scroll);
+            var sections = _sections = new VisualElement { name = "sections" };
             sections.style.flexDirection = FlexDirection.Column;
             sections.style.flexShrink = 0;
             _favourites = CreateFavouritesSection();
@@ -154,8 +171,8 @@ namespace BetterProject.Editor
             sections.Add(_recents);
             _newAssets = CreateNewAssetsSection();
             sections.Add(_newAssets);
-            left.Add(sections);
-            left.Add(_tree);
+            scroll.Add(sections);
+            scroll.Add(_tree);
             split.Add(left);
             // Right panel = breadcrumb bar above the content view.
             _breadcrumbs = new Breadcrumbs();
@@ -197,20 +214,27 @@ namespace BetterProject.Editor
             });
             bottom.Add(slider);
             var listToggle = CreateViewToggle("VerticalLayoutGroup Icon", "List", "List view");
+            var detailsToggle = CreateViewToggle(DetailsIcon(), "Details", "Details view");
             var tilesToggle = CreateViewToggle("GridLayoutGroup Icon", "Tiles", "Tile view");
-            void SetViewMode(bool tiles)
+            void SetViewMode(ViewMode mode)
             {
+                bool tiles = mode == ViewMode.Tiles;
                 iconSize = tiles ? tileSize : 0f;
+                if (!tiles) detailsView = mode == ViewMode.Details;
+                _content.DetailsMode = detailsView;
                 _content.IconSize = iconSize;
-                listToggle.SetValueWithoutNotify(!tiles);
+                listToggle.SetValueWithoutNotify(mode == ViewMode.List);
+                detailsToggle.SetValueWithoutNotify(mode == ViewMode.Details);
                 tilesToggle.SetValueWithoutNotify(tiles);
                 slider.style.display = tiles ? DisplayStyle.Flex : DisplayStyle.None;
             }
             // Radio behaviour: clicking the active button keeps it on.
-            listToggle.RegisterValueChangedCallback(_ => SetViewMode(false));
-            tilesToggle.RegisterValueChangedCallback(_ => SetViewMode(true));
-            SetViewMode(iconSize > 0f);
+            listToggle.RegisterValueChangedCallback(_ => SetViewMode(ViewMode.List));
+            detailsToggle.RegisterValueChangedCallback(_ => SetViewMode(ViewMode.Details));
+            tilesToggle.RegisterValueChangedCallback(_ => SetViewMode(ViewMode.Tiles));
+            SetViewMode(iconSize > 0f ? ViewMode.Tiles : detailsView ? ViewMode.Details : ViewMode.List);
             bottom.Add(listToggle);
+            bottom.Add(detailsToggle);
             bottom.Add(tilesToggle);
             // The ping listener can only be created inside OnGUI (see PingTracker): a 1 px IMGUI hook does it.
             var pingHook = new IMGUIContainer(PingTracker.EnsureInstalledFromOnGUI);
@@ -272,7 +296,14 @@ namespace BetterProject.Editor
         {
             var s = BetterProjectSettings.instance;
             if (_favourites == null || _recents == null || _newAssets == null || _tree == null) return;
-            _content?.Refresh(); // list layout ("Remove offset in right panel")
+            _content?.Refresh(); // list layout ("Remove offset in right panel"), labels ("Show file extensions")
+            if (_shownFileExtensions.HasValue && _shownFileExtensions != s.ShowFileExtensions)
+            {
+                _favourites.Rebuild();
+                _recents.Rebuild();
+                _newAssets.Rebuild();
+            }
+            _shownFileExtensions = s.ShowFileExtensions;
 
             // Show: hidden sections take no space; the folder tree drops or regains its Packages root.
             _favourites.style.display = s.ShowFavourites ? DisplayStyle.Flex : DisplayStyle.None;
@@ -280,11 +311,26 @@ namespace BetterProject.Editor
             _newAssets.style.display = s.ShowNewAssets ? DisplayStyle.Flex : DisplayStyle.None;
             _tree.SetShowPackages(s.ShowPackages);
 
+            // "Pin on top": pinned sections above the scroll area, the others in it; both keep the sections' order.
+            var pinned = new List<VisualElement>();
+            var scrolled = new List<VisualElement>();
+            (s.PinFavourites ? pinned : scrolled).Add(_favourites);
+            (s.PinRecents ? pinned : scrolled).Add(_recents);
+            scrolled.Add(_newAssets);
+            Arrange(_pinned, pinned);
+            Arrange(_sections, scrolled);
+            // A line under the pinned sections, where the scrolled rows pass beneath them.
+            bool anyPinned = (s.PinFavourites && s.ShowFavourites) || (s.PinRecents && s.ShowRecents);
+            _pinned.style.borderBottomWidth = anyPinned ? 1 : 0;
+
             // "Sidebar spacing": a gap between visible sections only (none between rows, none above the first).
+            // Counted per area: the first visible section of the pinned area and of the scroll area has none.
             float gap = Theme.SectionSpacing;
-            _recents.style.marginTop = s.ShowFavourites ? gap : 0;
-            _newAssets.style.marginTop = s.ShowFavourites || s.ShowRecents ? gap : 0;
-            _tree.style.marginTop = s.ShowFavourites || s.ShowRecents || s.ShowNewAssets ? gap : 0;
+            bool before = false;
+            foreach (var section in pinned) before |= SetGap(section, before, gap);
+            before = false;
+            foreach (var section in scrolled) before |= SetGap(section, before, gap);
+            _tree.style.marginTop = before ? gap : 0;
             _tree.SetRootSpacing(gap); // between Assets and Packages
 
             if (_createButton != null) _createButton.style.display = s.ShowCreateButton ? DisplayStyle.Flex : DisplayStyle.None;
@@ -294,11 +340,38 @@ namespace BetterProject.Editor
             _right?.EnableInClassList(Theme.NoHoverClass, !s.HoverRightPanel);
         }
 
+        // Top margin of a section: `gap` if a visible section is above it. Returns whether this one is visible.
+        static bool SetGap(VisualElement section, bool visibleAbove, float gap)
+        {
+            section.style.marginTop = visibleAbove ? gap : 0;
+            return section.style.display != DisplayStyle.None;
+        }
+
+        // Makes `children` the children of `container`, in that order; does nothing if they already are.
+        static void Arrange(VisualElement container, List<VisualElement> children)
+        {
+            bool same = container.childCount == children.Count;
+            for (int i = 0; same && i < children.Count; i++) same = container[i] == children[i];
+            if (same) return;
+            foreach (var child in children) container.Add(child); // Add moves it from its old parent, to the end
+        }
+
+        enum ViewMode { List, Details, Tiles }
+
+        // The Search window's table view icon; null if this Unity version has none (the button shows text then).
+        static Texture DetailsIcon()
+        {
+            string name = "Icons/QuickSearch/" + (EditorGUIUtility.isProSkin ? "d_" : "") + "TableView.png";
+            return EditorGUIUtility.Load(name) as Texture;
+        }
+
         static ToolbarToggle CreateViewToggle(string iconName, string fallbackText, string tooltip)
+            => CreateViewToggle(EditorGUIUtility.IconContent(iconName).image, fallbackText, tooltip);
+
+        static ToolbarToggle CreateViewToggle(Texture texture, string fallbackText, string tooltip)
         {
             var toggle = new ToolbarToggle { tooltip = tooltip };
             toggle.style.flexShrink = 0;
-            var texture = EditorGUIUtility.IconContent(iconName).image;
             if (texture == null)
             {
                 toggle.text = fallbackText;

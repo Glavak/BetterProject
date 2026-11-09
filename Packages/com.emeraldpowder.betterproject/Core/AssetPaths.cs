@@ -55,5 +55,31 @@ namespace BetterProject.Core
             if (name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)) return false;
             return !name.EndsWith(".meta", StringComparison.OrdinalIgnoreCase);
         }
+
+        /// <summary>Extension of the path's last segment including the dot (".png"), or "" if it has none.</summary>
+        public static string Extension(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return "";
+            int start = path.LastIndexOf('/') + 1;
+            int dot = path.LastIndexOf('.');
+            if (dot <= start || dot == path.Length - 1) return "";
+            return path.Substring(dot);
+        }
+
+        /// <summary>
+        /// Splits a file name typed in rename while extensions are shown into the base name and the extension the
+        /// file should end up with. Typing no extension keeps <paramref name="originalExtension"/>; the original one
+        /// in another case counts as unchanged.
+        /// </summary>
+        public static (string Name, string Extension) SplitTypedFileName(string typed, string originalExtension)
+        {
+            typed = typed ?? "";
+            originalExtension = originalExtension ?? "";
+            if (originalExtension.Length > 0 && typed.EndsWith(originalExtension, StringComparison.OrdinalIgnoreCase))
+                return (typed.Substring(0, typed.Length - originalExtension.Length), originalExtension);
+            string ext = Extension(typed);
+            if (ext.Length == 0) return (typed, originalExtension);
+            return (typed.Substring(0, typed.Length - ext.Length), ext);
+        }
     }
 }

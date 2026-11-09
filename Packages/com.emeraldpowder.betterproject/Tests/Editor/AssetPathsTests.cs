@@ -54,5 +54,29 @@ namespace BetterProject.Core.Tests
             Assert.IsFalse(AssetPaths.IsImportedName("scratch.tmp"));
             Assert.IsFalse(AssetPaths.IsImportedName(""));
         }
+            [Test] public void Extension_Cases()
+        {
+            Assert.AreEqual(".png", AssetPaths.Extension("Assets/A/Hero.png"));
+            Assert.AreEqual(".gz", AssetPaths.Extension("Assets/a.tar.gz"));
+            Assert.AreEqual("", AssetPaths.Extension("Assets/A.b/Hero"));
+            Assert.AreEqual("", AssetPaths.Extension("Assets/Hero."));
+            Assert.AreEqual("", AssetPaths.Extension("Assets/.hidden"));
+            Assert.AreEqual("", AssetPaths.Extension(""));
+            Assert.AreEqual("", AssetPaths.Extension(null));
+        }
+        [Test] public void SplitTypedFileName_KeepsExtension()
+        {
+            Assert.AreEqual(("Hero2", ".png"), AssetPaths.SplitTypedFileName("Hero2.png", ".png"));
+            Assert.AreEqual(("Hero2", ".png"), AssetPaths.SplitTypedFileName("Hero2.PNG", ".png"));
+        }
+        [Test] public void SplitTypedFileName_RemovedExtensionKeepsOriginal()
+            => Assert.AreEqual(("Hero2", ".png"), AssetPaths.SplitTypedFileName("Hero2", ".png"));
+        [Test] public void SplitTypedFileName_ChangedExtension()
+        {
+            Assert.AreEqual(("Hero", ".jpg"), AssetPaths.SplitTypedFileName("Hero.jpg", ".png"));
+            Assert.AreEqual(("Hero", ".txt"), AssetPaths.SplitTypedFileName("Hero.txt", ""));
+        }
+        [Test] public void SplitTypedFileName_OnlyExtension() => Assert.AreEqual(("", ".png"), AssetPaths.SplitTypedFileName(".png", ".png"));
+        [Test] public void SplitTypedFileName_Empty() => Assert.AreEqual(("", ".png"), AssetPaths.SplitTypedFileName("", ".png"));
     }
 }

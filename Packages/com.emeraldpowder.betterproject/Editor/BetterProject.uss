@@ -29,3 +29,8 @@
 .unity-collection-view:focus .unity-collection-view__item--selected:hover .unity-label {
     color: #FFFFFF;
 }
+
+/* Details view header: a column title's right edge resizes the column. */
+.bp-col-resize {
+    cursor: resize-horizontal;
+}

@@ -25,7 +25,7 @@ namespace BetterProject.Editor
             keywords = new HashSet<string>
             {
                 "Better Project", "Project window", "Sidebar", "Spacing", "Show", "Favourites", "Recents", "Packages",
-                "Highlight", "Hover", "Mouse", "Panel", "Select", "Folders", "Right pane", "Delete", "Confirmation", "Offset", "Padding", "Max recents", "Max new assets", "New assets", "Create", "Plus", "Button", "Asset changed", "Prefab opened", "Scene opened", "Asset imported", "Search", "Keyboard", "Layout",
+                "Highlight", "Hover", "Mouse", "Panel", "Select", "Folders", "Right pane", "Delete", "Confirmation", "Offset", "Padding", "Max recents", "Max new assets", "New assets", "Create", "Plus", "Button", "File extension", "Extension", "Rename", "Pin", "Top", "Scroll", "Asset changed", "Prefab opened", "Scene opened", "Asset imported", "Search", "Keyboard", "Layout",
             },
             activateHandler = (search, root) => Build(root, BetterProjectSettings.instance),
         };
@@ -59,11 +59,20 @@ namespace BetterProject.Editor
                 s.ShowNewAssets, v => s.ShowNewAssets = v);
             Option(show, "Create button", "Show the \"+\" button left of the search field. It opens the Create menu for the folder shown.",
                 s.ShowCreateButton, v => s.ShowCreateButton = v);
+            Option(show, "File extensions",
+                "Show the file extension after asset names (\"Hero.png\"). Renaming then selects only the name, without the extension.",
+                s.ShowFileExtensions, v => s.ShowFileExtensions = v);
 
             Option(show, "Remove offset in right panel",
                 "List view: icons start at the left edge, without the padding Unity's Project window has there. " +
                 "Assets with sub-assets show their expand arrow at the right end of the row instead.",
                 s.RemoveRightPanelOffset, v => s.RemoveRightPanelOffset = v);
+
+            var pin = Block(root, "Pin on top");
+            Option(pin, "Favourites", "Favourites stay at the top of the left panel; the rest of the panel scrolls below them.",
+                s.PinFavourites, v => s.PinFavourites = v);
+            Option(pin, "Recents", "Recents stay at the top of the left panel; the rest of the panel scrolls below them.",
+                s.PinRecents, v => s.PinRecents = v);
 
             var lists = Block(root, "Lists");
             Count(lists, "Max recents", "How many assets Recents keeps. Lowering it drops the oldest entries.",

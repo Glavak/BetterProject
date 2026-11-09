@@ -33,6 +33,9 @@ namespace BetterProject.Editor
         // The ListView's rows: one row per item in list mode, one row per `Columns` items in grid mode.
         readonly List<int> _rowSource = new List<int>();
         float _iconSize;              // 0 = list
+        bool _details;                // list mode shown as a table (see Details)
+        DetailsColumns _detailsLayout = new DetailsColumns();
+        readonly DetailsHeader _header;
         int _columns = 1;
         float _builtIconSize = -1;
         float _builtRowHeight = RowHeight;
@@ -82,6 +85,7 @@ namespace BetterProject.Editor
                 float s = Mathf.Round(SnapIconSize(value));
                 if (Mathf.Approximately(s, _iconSize) && _builtIconSize >= 0) return;
                 _iconSize = s;
+                _header.style.display = Details ? DisplayStyle.Flex : DisplayStyle.None;
                 Reconfigure();
             }
         }
@@ -94,6 +98,34 @@ namespace BetterProject.Editor
         float CellWidth => _iconSize + TilePad;
         float CellHeight => _iconSize + 6f + TileLabelHeight;
         float CurrentRowHeight => _iconSize > 0f ? CellHeight : RowHeight;
+        bool Details => _details && _iconSize <= 0f;
+
+        /// <summary>List mode shows a table: name plus the columns of <see cref="DetailsLayout"/>, under a header.</summary>
+        public bool DetailsMode
+        {
+            get => _details;
+            set
+            {
+                if (_details == value) return;
+                _details = value;
+                RebuildRows();
+            }
+        }
+
+        /// <summary>Columns of the details table (order, shown, widths). Changed by the user via the header.</summary>
+        public DetailsColumns DetailsLayout
+        {
+            get => _detailsLayout;
+            set
+            {
+                _detailsLayout = value ?? new DetailsColumns();
+                _header.Layout = _detailsLayout;
+                if (Details) RebuildRows();
+            }
+        }
+
+        /// <summary>The user reordered, showed / hid or resized a details column.</summary>
+        public event Action DetailsLayoutChanged;
 
         public SelectionModel Selection { get; } = new SelectionModel();
         public InlineRename Rename { get; } = new InlineRename();
@@ -154,6 +186,13 @@ namespace BetterProject.Editor
         public ContentView()
         {
             style.flexGrow = 1;
+            _header = new DetailsHeader { Layout = _detailsLayout };
+            _header.style.display = DisplayStyle.None;
+            _header.ColumnsChanged += () => { RebuildRows(); DetailsLayoutChanged?.Invoke(); };
+            _header.WidthChanging += (column, width) =>
+                _list.Query(DetailsHeader.ColumnPrefix + DetailsColumns.Key(column)).ForEach(e => e.style.width = width);
+            _header.WidthChanged += () => DetailsLayoutChanged?.Invoke();
+            Add(_header);
             _list = new ListView
             {
                 fixedItemHeight = RowHeight,
@@ -166,6 +205,10 @@ namespace BetterProject.Editor
             };
             _list.style.flexGrow = 1;
             Add(_list);
+            // The header spans the scrollbar the rows don't: keep the columns above their cells.
+            var viewport = _list.Q<ScrollView>().contentViewport;
+            viewport.RegisterCallback<GeometryChangedEvent>(_ =>
+                _header.SetRightInset(_list.layout.width - viewport.layout.width));
             _dropFrame = new VisualElement { name = "drop-frame", pickingMode = PickingMode.Ignore };
             _dropFrame.style.position = Position.Absolute;
             _dropFrame.style.left = _dropFrame.style.right = _dropFrame.style.top = _dropFrame.style.bottom = 0;
@@ -325,9 +368,27 @@ namespace BetterProject.Editor
                 icon.style.flexShrink = 0; // a long name must not squeeze the icon
                 label.style.whiteSpace = WhiteSpace.NoWrap;
                 arrow.style.height = RowHeight;
-                cell.Add(arrow);
-                cell.Add(icon);
-                cell.Add(label);
+                // Details: arrow, icon and name sit in the Name column, the other columns are labels beside it.
+                var nameHost = cell;
+                if (Details)
+                {
+                    nameHost = new VisualElement { name = "name-col" };
+                    nameHost.style.flexDirection = FlexDirection.Row;
+                    nameHost.style.alignItems = Align.Center;
+                    nameHost.style.height = RowHeight;
+                    foreach (var c in _detailsLayout.Visible())
+                    {
+                        if (c.Id == DetailsColumn.Name)
+                        {
+                            DetailsHeader.StyleColumn(nameHost, c);
+                            cell.Add(nameHost);
+                        }
+                        else cell.Add(MakeColumnLabel(c));
+                    }
+                }
+                nameHost.Add(arrow);
+                nameHost.Add(icon);
+                nameHost.Add(label);
             }
             else
             {
@@ -367,6 +428,19 @@ namespace BetterProject.Editor
             cell.RegisterCallback<PointerCancelEvent>(e => DisarmDrag(true));
             cell.RegisterCallback<DragLeaveEvent>(e => { if (_dropCell == e.currentTarget) ClearDropHighlight(); });
             return cell;
+        }
+
+        static Label MakeColumnLabel(DetailsColumns.Column c)
+        {
+            var label = new Label { name = DetailsHeader.ColumnPrefix + DetailsColumns.Key(c.Id), userData = c.Id };
+            DetailsHeader.StyleColumn(label, c);
+            label.style.marginLeft = label.style.marginRight = label.style.marginTop = label.style.marginBottom = 0;
+            label.style.paddingLeft = 4;
+            label.style.paddingRight = 2;
+            label.style.whiteSpace = WhiteSpace.NoWrap;
+            label.style.textOverflow = TextOverflow.Ellipsis;
+            label.style.color = Theme.DimText;
+            return label;
         }
 
         void BindRow(VisualElement row, int rowIndex)
@@ -416,7 +490,7 @@ namespace BetterProject.Editor
             }
             else tex = Thumbnails.Icon(item);
             cell.Q<Image>("icon").image = tex;
-            cell.Q<Label>("label").text = item.Name;
+            cell.Q<Label>("label").text = AssetRefUtil.Label(item.Name, item.Path, item.IsFolder, item.IsSubAsset);
 
             var arrow = cell.Q("arrow");
             bool expandable = item.HasSubAssets && !pending;
@@ -427,12 +501,17 @@ namespace BetterProject.Editor
                 // "Remove offset in right panel": no left padding and no reserved arrow column, so icons sit at the
                 // left edge; the sub-asset arrow moves to the row's right end (absolute: takes no space).
                 bool flush = BetterProjectSettings.instance.RemoveRightPanelOffset;
-                cell.style.paddingLeft = (flush ? 0 : 4) + item.Depth * DepthIndent;
+                var nameHost = cell.Q("name-col") ?? cell;
+                nameHost.style.paddingLeft = (flush ? 0 : 4) + item.Depth * DepthIndent;
                 arrow.style.position = flush ? Position.Absolute : Position.Relative;
                 arrow.style.right = flush ? new StyleLength(4f) : new StyleLength(StyleKeyword.Null);
                 arrow.style.top = flush ? new StyleLength(0f) : new StyleLength(StyleKeyword.Null);
                 var label = cell.Q<Label>("label");
                 label.style.marginRight = flush && expandable ? ArrowWidth + 4 : 0;
+                if (Details)
+                    foreach (var child in cell.Children())
+                        if (child is Label column && column.userData is DetailsColumn id)
+                            column.text = pending ? "" : DetailsData.Get(item, id);
             }
 
             bool selected = !pending && item.InstanceId != 0 && ContainsId(item.InstanceId);
@@ -477,6 +556,7 @@ namespace BetterProject.Editor
         {
             _hasSub.Clear();
             _hierarchy = null;
+            DetailsData.Invalidate();
         }
 
         static List<ContentItem> LoadSubAssets(ContentItem parent)
@@ -516,7 +596,7 @@ namespace BetterProject.Editor
         {
             if (evt.button != 0 || evt.ctrlKey || evt.commandKey) return; // right / ctrl click: row context menu
             evt.StopPropagation();
-            if (((VisualElement)evt.currentTarget).parent?.userData is int index && index >= 0 && index < _items.Count)
+            if (CellOf(evt.currentTarget)?.userData is int index && index >= 0 && index < _items.Count)
                 ToggleExpand(index);
         }
 
@@ -580,6 +660,14 @@ namespace BetterProject.Editor
             UpdatePreviewCache();
             float y = firstItem / _columns * CurrentRowHeight;
             if (y > 0f) _list.schedule.Execute(() => _list.Q<ScrollView>().scrollOffset = new Vector2(0f, y));
+        }
+
+        // Recreates the rows (cell structure depends on the mode and the details columns).
+        void RebuildRows()
+        {
+            _header.style.display = Details ? DisplayStyle.Flex : DisplayStyle.None;
+            _builtIconSize = -1; // forces Reconfigure past its "nothing changed" check and its throttle
+            Reconfigure();
         }
 
         void SyncRowSource()

@@ -375,7 +375,7 @@ namespace BetterProject.Editor
             }
             else toggle.style.visibility = Visibility.Hidden; // keeps alignment, like a TreeView leaf
 
-            var label = new Label(row.Name);
+            var label = new Label(row.Missing ? row.Name : AssetRefUtil.Label(row.Name, row.Path, row.IsFolder, row.IsSubAsset));
             // Entries sit one level below the section header, like a root's children in the folder tree.
             var el = MakeTreeRow(row.Depth + 1, toggle, MakeContent(IconFor(row), label));
 

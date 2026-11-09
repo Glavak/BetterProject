@@ -22,6 +22,10 @@ namespace BetterProject.Editor
         [SerializeField] bool showPackages = true;
         [SerializeField] bool showNewAssets;
         [SerializeField] bool showCreateButton = true;
+        [SerializeField] bool showFileExtensions;
+
+        [SerializeField] bool pinFavourites;
+        [SerializeField] bool pinRecents;
 
         [SerializeField] int maxRecents = 10;
         [SerializeField] int maxNewAssets = 20;
@@ -58,6 +62,13 @@ namespace BetterProject.Editor
         public bool ShowNewAssets { get => showNewAssets; set => Set(ref showNewAssets, value); }
         /// <summary>Show the "+" (Create) button left of the search field.</summary>
         public bool ShowCreateButton { get => showCreateButton; set => Set(ref showCreateButton, value); }
+        /// <summary>Asset names show their file extension ("Hero.png"); rename then preselects only the name part.</summary>
+        public bool ShowFileExtensions { get => showFileExtensions; set => Set(ref showFileExtensions, value); }
+
+        /// <summary>Favourites stay at the top of the left panel; the rest of it scrolls below.</summary>
+        public bool PinFavourites { get => pinFavourites; set => Set(ref pinFavourites, value); }
+        /// <summary>Recents stay at the top of the left panel; the rest of it scrolls below.</summary>
+        public bool PinRecents { get => pinRecents; set => Set(ref pinRecents, value); }
 
         /// <summary>How many entries Recents keeps.</summary>
         public int MaxRecents

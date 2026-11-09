@@ -35,6 +35,14 @@ namespace BetterProject.Editor
             return o.name + Path.GetExtension(path);
         }
 
+        /// <summary>True if a row for this item shows the file extension after its name ("Show file extensions").</summary>
+        public static bool ShowsExtension(bool isFolder, bool isSubAsset)
+            => !isFolder && !isSubAsset && BetterProjectSettings.instance.ShowFileExtensions;
+
+        /// <summary>Row label: <paramref name="name"/>, plus the file extension when <see cref="ShowsExtension"/>.</summary>
+        public static string Label(string name, string path, bool isFolder, bool isSubAsset)
+            => ShowsExtension(isFolder, isSubAsset) ? name + AssetPaths.Extension(path) : name;
+
         /// <summary>Current asset path of the reference, or null if the asset no longer exists.</summary>
         public static string PathOf(AssetRef r)
         {

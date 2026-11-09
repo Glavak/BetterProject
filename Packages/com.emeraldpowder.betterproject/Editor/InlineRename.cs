@@ -1,4 +1,5 @@
 using System;
+using BetterProject.Core;
 using UnityEditor;
 using UnityEditorInternal;
 using UnityEngine;
@@ -10,6 +11,8 @@ namespace BetterProject.Editor
     /// Inline text field that replaces a row's label while renaming (Unity RenameOverlay semantics): Enter and focus loss
     /// commit, Esc cancels. Default commit: AssetDatabase.RenameAsset; a non-empty error is logged as a warning and the
     /// name reverts; an empty or unchanged name does nothing.
+    /// With "Show file extensions" on, the field holds the name with its extension and preselects only the name;
+    /// a typed different extension moves the file to it, a removed one keeps the original.
     /// The owning view re-hosts the field via <see cref="Attach"/> / <see cref="Detach"/> as rows are rebound.
     /// </summary>
     public class InlineRename
@@ -20,6 +23,7 @@ namespace BetterProject.Editor
         Action _onCancel;
         bool _ending;
         bool _selectAllOnAttach;
+        string _extension; // shown after the name in the field; null when extensions are hidden
         VisualElement _hiddenLabel;
 
         public bool IsActive { get; private set; }
@@ -61,7 +65,8 @@ namespace BetterProject.Editor
             _onCommit = onCommit;
             _onCancel = onCancel;
             IsActive = true;
-            _field.SetValueWithoutNotify(item.Name ?? "");
+            _extension = AssetRefUtil.ShowsExtension(item.IsFolder, item.IsSubAsset) ? AssetPaths.Extension(item.Path) : null;
+            _field.SetValueWithoutNotify((item.Name ?? "") + (_extension ?? ""));
             _selectAllOnAttach = true;
             if (row != null) Attach(row);
         }
@@ -80,35 +85,42 @@ namespace BetterProject.Editor
         {
             if (!IsActive || row == null) return;
             bool selectAll = _selectAllOnAttach;
-            if (_field.parent == row && !selectAll) return;
+            bool hosted = IsHostedIn(row);
+            if (hosted && !selectAll) return;
             _selectAllOnAttach = false;
-            if (_field.parent != row)
+            if (!hosted)
             {
                 RestoreLabel();
                 _field.RemoveFromHierarchy();
                 var label = row.Q<Label>("label");
                 if (label != null)
                 {
+                    // In the label's place (details rows have more columns after it).
                     label.style.display = DisplayStyle.None;
                     _hiddenLabel = label;
+                    label.parent.Insert(label.parent.IndexOf(label) + 1, _field);
                 }
-                row.Add(_field);
+                else row.Add(_field);
             }
             _field.schedule.Execute(() =>
             {
                 if (!IsActive || _field.panel == null) return;
                 _field.Focus();
-                if (selectAll) _field.SelectAll();
+                if (!selectAll) return;
+                if (_extension == null) _field.SelectAll();
+                else _field.SelectRange(_field.value.Length - _extension.Length, 0); // the name only, caret at its end
             });
         }
 
         /// <summary>Removes the field from <paramref name="row"/> if it is hosted there (row rebound to another item).</summary>
         public void Detach(VisualElement row)
         {
-            if (row == null || _field.parent != row) return;
+            if (row == null || !IsHostedIn(row)) return;
             RestoreLabel();
             _field.RemoveFromHierarchy();
         }
+
+        bool IsHostedIn(VisualElement row) => _field.parent != null && (_field.parent == row || row.Contains(_field));
 
         void RestoreLabel()
         {
@@ -151,6 +163,7 @@ namespace BetterProject.Editor
             var item = _item;
             var onCommit = _onCommit;
             var onCancel = _onCancel;
+            var extension = _extension;
             string newName = Clean(_field.value);
             IsActive = false;
             _onCommit = null;
@@ -163,15 +176,10 @@ namespace BetterProject.Editor
                 {
                     if (onCommit != null || onCancel != null)
                     {
-                        if (accept) onCommit?.Invoke(newName);
+                        if (accept) onCommit?.Invoke(WithExtension(newName, extension));
                         else onCancel?.Invoke();
                     }
-                    else if (accept && newName.Length > 0 && newName != item.Name)
-                    {
-                        string error = AssetDatabase.RenameAsset(item.Path, newName);
-                        if (!string.IsNullOrEmpty(error))
-                            Debug.LogWarning("[Better Project] Rename of '" + item.Path + "' to '" + newName + "' failed: " + error);
-                    }
+                    else if (accept) RenameAsset(item, newName, extension);
                 }
                 catch (Exception e)
                 {
@@ -188,6 +196,31 @@ namespace BetterProject.Editor
                 _ending = false;
                 Ended?.Invoke();
             }
+        }
+
+        // Typed name as the commit handler gets it: the original extension added back if the user removed it,
+        // "" when only an extension is left (the handler's empty name = default name).
+        static string WithExtension(string typed, string extension)
+        {
+            if (extension == null) return typed;
+            var (name, ext) = AssetPaths.SplitTypedFileName(typed, extension);
+            return name.Length == 0 ? "" : name + ext;
+        }
+
+        static void RenameAsset(ContentItem item, string typed, string extension)
+        {
+            string name = typed, ext = extension;
+            if (extension != null) (name, ext) = AssetPaths.SplitTypedFileName(typed, extension);
+            if (name.Length == 0) return;
+            string error;
+            if (extension == null || string.Equals(ext, extension, StringComparison.OrdinalIgnoreCase))
+            {
+                if (name == item.Name) return;
+                error = AssetDatabase.RenameAsset(item.Path, name);
+            }
+            else error = AssetDatabase.MoveAsset(item.Path, AssetPaths.Parent(item.Path) + "/" + name + ext); // extension changed
+            if (!string.IsNullOrEmpty(error))
+                Debug.LogWarning("[Better Project] Rename of '" + item.Path + "' to '" + name + ext + "' failed: " + error);
         }
 
         static string Clean(string name)
