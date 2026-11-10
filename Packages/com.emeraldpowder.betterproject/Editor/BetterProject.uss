@@ -30,7 +30,7 @@
     color: #FFFFFF;
 }
 
-/* Details view header: a column title's right edge resizes the column. */
+/* Details view header: a border between column titles resizes the column left of it. */
 .bp-col-resize {
     cursor: resize-horizontal;
 }

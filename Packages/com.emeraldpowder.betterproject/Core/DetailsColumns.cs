@@ -30,7 +30,7 @@ namespace BetterProject.Core
             new Column { Id = DetailsColumn.Size, Visible = true, Width = 70 },
             new Column { Id = DetailsColumn.Modified, Visible = false, Width = 115 },
             new Column { Id = DetailsColumn.Labels, Visible = false, Width = 110 },
-            new Column { Id = DetailsColumn.Info, Visible = true, Width = 120 },
+            new Column { Id = DetailsColumn.Info, Visible = true, Width = 80 },
         };
 
         readonly List<Column> _columns = new List<Column>();
