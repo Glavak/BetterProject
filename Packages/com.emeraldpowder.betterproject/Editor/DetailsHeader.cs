@@ -7,8 +7,9 @@ using UnityEngine.UIElements;
 namespace BetterProject.Editor
 {
     /// <summary>
-    /// Column header of the details view. Drag a title to reorder, drag a border between titles to resize the column
-    /// left of it, right click for the list of columns (shown / hidden). Name stretches over the space the other columns leave.
+    /// Column header of the details view. Drag a title to reorder, drag a border between titles to resize the columns on
+    /// both sides of it, right click for the list of columns (shown / hidden). Name stretches over the space the other
+    /// columns leave.
     /// </summary>
     class DetailsHeader : VisualElement
     {
@@ -18,10 +19,12 @@ namespace BetterProject.Editor
         public const string ColumnPrefix = "col-";
         const string ResizeClass = "bp-col-resize"; // resize cursor, BetterProject.uss
         const float DragThreshold = 4f;
+        const float HandleWidth = 8f; // grab area of a border, centred on it
         static readonly Color MarkerColor = new Color(0.23f, 0.47f, 0.85f, 1f);
 
         DetailsColumns _layout = new DetailsColumns();
         readonly VisualElement _cells;
+        readonly VisualElement _handles;
         readonly VisualElement _marker;
 
         // Reorder drag (on a title).
@@ -31,10 +34,9 @@ namespace BetterProject.Editor
         bool _reordering;
         int _gap;
 
-        // Resize drag (on a border between titles).
-        DetailsColumn _resizeColumn;
-        VisualElement _resizeCell;
-        float _resizeStartX, _resizeStartWidth, _resizeSign;
+        // Resize drag (on a border between titles). Null side = Name (takes the rest) or nothing.
+        DetailsColumn? _resizeLeft, _resizeRight;
+        float _resizeStartX, _resizeStartLeft, _resizeStartRight;
 
         /// <summary>Order or shown columns changed: rows must be rebuilt.</summary>
         public event Action ColumnsChanged;
@@ -61,6 +63,11 @@ namespace BetterProject.Editor
             _cells.style.flexDirection = FlexDirection.Row;
             _cells.style.flexGrow = 1;
             Add(_cells);
+            // Over the titles, so a border's grab area covers both sides of it.
+            _handles = new VisualElement { pickingMode = PickingMode.Ignore };
+            _handles.style.position = Position.Absolute;
+            _handles.style.left = _handles.style.top = _handles.style.right = _handles.style.bottom = 0;
+            Add(_handles);
             _marker = new VisualElement { pickingMode = PickingMode.Ignore };
             _marker.style.position = Position.Absolute;
             _marker.style.top = 0;
@@ -109,12 +116,21 @@ namespace BetterProject.Editor
         public void Rebuild()
         {
             _cells.Clear();
+            _handles.Clear();
             var visible = _layout.Visible();
             for (int i = 0; i < visible.Count; i++)
-                _cells.Add(MakeCell(visible[i], i == 0, i == visible.Count - 1));
+            {
+                _cells.Add(MakeCell(visible[i]));
+                // Border right of column i, between it and column i + 1 (or after the last one).
+                DetailsColumn? left = visible[i].Id == DetailsColumn.Name ? (DetailsColumn?)null : visible[i].Id;
+                DetailsColumn? right = i + 1 < visible.Count && visible[i + 1].Id != DetailsColumn.Name
+                    ? visible[i + 1].Id : (DetailsColumn?)null;
+                if (left == null && right == null) continue; // Name last: nothing to resize
+                _handles.Add(MakeResizeHandle(left, right));
+            }
         }
 
-        VisualElement MakeCell(DetailsColumns.Column c, bool first, bool last)
+        VisualElement MakeCell(DetailsColumns.Column c)
         {
             var cell = new VisualElement { userData = c.Id, tooltip = DetailsColumns.Title(c.Id) };
             StyleColumn(cell, c);
@@ -134,27 +150,35 @@ namespace BetterProject.Editor
             cell.RegisterCallback<PointerMoveEvent>(OnCellPointerMove);
             cell.RegisterCallback<PointerUpEvent>(OnCellPointerUp);
             cell.RegisterCallback<PointerCaptureOutEvent>(_ => EndReorder(false));
-
-            // A border between two titles resizes the column left of it: half of its grab area is in each cell.
-            if (!first) cell.Add(MakeResizeHandle(c.Id, false));
-            if (!(last && c.Id == DetailsColumn.Name)) cell.Add(MakeResizeHandle(c.Id, true)); // Name last: no neighbour
+            cell.RegisterCallback<GeometryChangedEvent>(_ => PlaceHandles());
             return cell;
         }
 
-        VisualElement MakeResizeHandle(DetailsColumn id, bool rightEdge)
+        VisualElement MakeResizeHandle(DetailsColumn? left, DetailsColumn? right)
         {
             var handle = new VisualElement();
             handle.AddToClassList(ResizeClass);
             handle.style.position = Position.Absolute;
-            if (rightEdge) handle.style.right = 0;
-            else handle.style.left = 0;
             handle.style.top = 0;
             handle.style.bottom = 0;
-            handle.style.width = 3;
-            handle.RegisterCallback<PointerDownEvent>(e => OnResizeDown(e, id, rightEdge));
+            handle.style.width = HandleWidth;
+            handle.RegisterCallback<PointerDownEvent>(e => OnResizeDown(e, left, right));
             handle.RegisterCallback<PointerMoveEvent>(OnResizeMove);
             handle.RegisterCallback<PointerUpEvent>(OnResizeUp);
             return handle;
+        }
+
+        /// <summary>Centres each resize handle on its border (the right edge of its title).</summary>
+        void PlaceHandles()
+        {
+            int h = 0;
+            var visible = _layout.Visible();
+            for (int i = 0; i < _cells.childCount && h < _handles.childCount; i++)
+            {
+                bool nameLast = i == visible.Count - 1 && visible[i].Id == DetailsColumn.Name;
+                if (nameLast) continue; // no handle there, see Rebuild
+                _handles[h++].style.left = _cells[i].layout.xMax - HandleWidth / 2f;
+            }
         }
 
         // ---- reorder ----
@@ -214,45 +238,47 @@ namespace BetterProject.Editor
 
         // ---- resize ----
 
-        void OnResizeDown(PointerDownEvent e, DetailsColumn id, bool rightEdge)
+        void OnResizeDown(PointerDownEvent e, DetailsColumn? left, DetailsColumn? right)
         {
             if (e.button != 0) return;
             e.StopPropagation(); // not a reorder press on the title
-            // The column left of the border, and the one right of it.
-            var visible = _layout.Visible();
-            int self = visible.FindIndex(c => c.Id == id);
-            int left = rightEdge ? self : self - 1;
-            if (left < 0) return; // left edge of the first title: no border there
-            DetailsColumn? right = left + 1 < visible.Count ? visible[left + 1].Id : (DetailsColumn?)null;
-            // Name takes the rest, so it's resized through its right neighbour (which shrinks as Name grows).
-            if (visible[left].Id == DetailsColumn.Name)
-            {
-                if (right == null) return; // Name is last: nothing to take the space from
-                _resizeColumn = right.Value;
-                _resizeSign = -1f;
-            }
-            else
-            {
-                _resizeColumn = visible[left].Id;
-                _resizeSign = 1f;
-            }
-            _resizeCell = null;
-            foreach (var cell in _cells.Children())
-                if (cell.userData is DetailsColumn cid && cid == _resizeColumn) _resizeCell = cell;
-            if (_resizeCell == null) return;
+            _resizeLeft = left;
+            _resizeRight = right;
             _resizeStartX = e.position.x;
-            _resizeStartWidth = _layout.WidthOf(_resizeColumn);
+            _resizeStartLeft = left.HasValue ? _layout.WidthOf(left.Value) : 0f;
+            _resizeStartRight = right.HasValue ? _layout.WidthOf(right.Value) : 0f;
             ((VisualElement)e.currentTarget).CapturePointer(e.pointerId);
         }
 
         void OnResizeMove(PointerMoveEvent e)
         {
             var handle = (VisualElement)e.currentTarget;
-            if (_resizeCell == null || !handle.HasPointerCapture(e.pointerId)) return;
-            if (!_layout.SetWidth(_resizeColumn, _resizeStartWidth + _resizeSign * (e.position.x - _resizeStartX))) return;
-            float w = _layout.WidthOf(_resizeColumn);
-            _resizeCell.style.width = w;
-            WidthChanging?.Invoke(_resizeColumn, w);
+            if (!handle.HasPointerCapture(e.pointerId)) return;
+            // The left column grows by dx, the right one shrinks by it; dx is clamped so both stay in range.
+            float dx = e.position.x - _resizeStartX;
+            float min = float.NegativeInfinity, max = float.PositiveInfinity;
+            if (_resizeLeft.HasValue)
+            {
+                min = Mathf.Max(min, DetailsColumns.MinWidth - _resizeStartLeft);
+                max = Mathf.Min(max, DetailsColumns.MaxWidth - _resizeStartLeft);
+            }
+            if (_resizeRight.HasValue)
+            {
+                min = Mathf.Max(min, _resizeStartRight - DetailsColumns.MaxWidth);
+                max = Mathf.Min(max, _resizeStartRight - DetailsColumns.MinWidth);
+            }
+            dx = Mathf.Clamp(dx, min, max);
+            if (_resizeLeft.HasValue) ApplyWidth(_resizeLeft.Value, _resizeStartLeft + dx);
+            if (_resizeRight.HasValue) ApplyWidth(_resizeRight.Value, _resizeStartRight - dx);
+        }
+
+        void ApplyWidth(DetailsColumn id, float width)
+        {
+            if (!_layout.SetWidth(id, width)) return;
+            float w = _layout.WidthOf(id);
+            foreach (var cell in _cells.Children())
+                if (cell.userData is DetailsColumn cid && cid == id) cell.style.width = w;
+            WidthChanging?.Invoke(id, w);
         }
 
         void OnResizeUp(PointerUpEvent e)
@@ -261,7 +287,6 @@ namespace BetterProject.Editor
             if (!handle.HasPointerCapture(e.pointerId)) return;
             handle.ReleasePointer(e.pointerId);
             e.StopPropagation();
-            _resizeCell = null;
             WidthChanged?.Invoke();
         }
 
