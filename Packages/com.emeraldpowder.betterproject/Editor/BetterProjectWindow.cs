@@ -393,9 +393,10 @@ namespace BetterProject.Editor
             section.CollapsedChanged += c => favouritesCollapsed = c;
             section.FolderOpened += OnFolderClicked;
             section.ItemOpened += OnItemOpened;
+            section.FillChildContextMenu = AddOpenFolderItem;
             section.FillContextMenu = (entry, menu) =>
             {
-                AddOpenFolderItem(entry, menu);
+                AddOpenFolderItem(AssetRefUtil.PathOf(entry.Ref), menu);
                 menu.AddItem(new GUIContent("Remove from Favourites"), false, () => FavouritesStore.Remove(entry.Ref));
             };
             section.HandleDrop = HandleFavouritesDrop;
@@ -448,9 +449,10 @@ namespace BetterProject.Editor
             section.CollapsedChanged += c => recentsCollapsed = c;
             section.FolderOpened += OnFolderClicked;
             section.ItemOpened += OnItemOpened;
+            section.FillChildContextMenu = AddOpenFolderItem;
             section.FillContextMenu = (entry, menu) =>
             {
-                AddOpenFolderItem(entry, menu);
+                AddOpenFolderItem(AssetRefUtil.PathOf(entry.Ref), menu);
                 menu.AddItem(new GUIContent("Remove from Recents"), false, () => RecentsStore.Remove(entry.Ref));
             };
             section.FillHeaderContextMenu = menu =>
@@ -482,9 +484,10 @@ namespace BetterProject.Editor
             section.CollapsedChanged += c => newAssetsCollapsed = c;
             section.FolderOpened += OnFolderClicked;
             section.ItemOpened += OnItemOpened;
+            section.FillChildContextMenu = AddOpenFolderItem;
             section.FillContextMenu = (entry, menu) =>
             {
-                AddOpenFolderItem(entry, menu);
+                AddOpenFolderItem(AssetRefUtil.PathOf(entry.Ref), menu);
                 menu.AddItem(new GUIContent("Remove from New assets"), false, () => NewAssetsStore.Remove(entry.Ref));
             };
             section.FillHeaderContextMenu = menu =>
@@ -506,10 +509,10 @@ namespace BetterProject.Editor
 
         void OnNewAssetsChanged() => _newAssets?.Rebuild();
 
-        // "Open folder": shows the folder containing the entry and flashes the entry there (a ping: selection kept).
-        void AddOpenFolderItem(RefSectionEntry entry, GenericMenu menu)
+        // "Open folder": shows the folder containing the asset and flashes the asset there (a ping: selection kept).
+        // `path` null = missing asset (item disabled).
+        void AddOpenFolderItem(string path, GenericMenu menu)
         {
-            string path = AssetRefUtil.PathOf(entry.Ref);
             var content = new GUIContent("Open folder");
             if (path == null || AssetPaths.Parent(path).Length == 0) { menu.AddDisabledItem(content); return; }
             menu.AddItem(content, false, () => PingAsset(path));

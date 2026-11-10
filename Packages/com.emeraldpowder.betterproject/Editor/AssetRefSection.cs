@@ -89,6 +89,8 @@ namespace BetterProject.Editor
 
         /// <summary>Adds items to the context menu of a top-level entry (right click). Null = no menu.</summary>
         public Action<RefSectionEntry, GenericMenu> FillContextMenu;
+        /// <summary>Fills the context menu of a row inside an expanded folder entry (gets the row's asset path).</summary>
+        public Action<string, GenericMenu> FillChildContextMenu;
 
         /// <summary>Italic hint shown in place of rows when the section is expanded but has no entries.</summary>
         public string EmptyText
@@ -521,8 +523,9 @@ namespace BetterProject.Editor
                 return;
             }
 
-            // Single click, folder or asset: select it (Inspector), keep the right panel as it is. Done on release, and
-            // only if no drag started, so dragging into an Inspector field keeps the Inspector showing its object.
+            // Single click, folder or asset: select it (Inspector), keep the right panel as it is (a folder inside a
+            // folder entry: open it there instead). Done on release, and only if no drag started, so dragging into an
+            // Inspector field keeps the Inspector showing its object.
 
             _dragRow = row;
             _dragElement = row.Element;
@@ -536,7 +539,14 @@ namespace BetterProject.Editor
             bool pressedHere = _dragRow == row; // still armed: pressed on this row and no drag started
             DisarmDrag();
             if (ContentView.IsContextClick(evt, false)) { evt.StopPropagation(); ShowContextMenu(row); return; }
-            if (evt.button == 0 && pressedHere) SelectRow(row);
+            if (evt.button != 0 || !pressedHere) return;
+            // A folder inside an expanded folder entry opens in the right panel; nothing gets selected.
+            if (row.IsFolder && !row.Entry.HasValue)
+            {
+                ClearSelection();
+                FolderOpened?.Invoke(row.Path);
+            }
+            else SelectRow(row);
         }
 
         void OnRowPointerMove(PointerMoveEvent evt)
@@ -569,9 +579,9 @@ namespace BetterProject.Editor
 
         void ShowContextMenu(Row row)
         {
-            if (FillContextMenu == null || !row.Entry.HasValue) return;
             var menu = new GenericMenu();
-            FillContextMenu(row.Entry.Value, menu);
+            if (row.Entry.HasValue) FillContextMenu?.Invoke(row.Entry.Value, menu);
+            else if (!row.Missing && row.Path != null) FillChildContextMenu?.Invoke(row.Path, menu);
             if (menu.GetItemCount() > 0) menu.ShowAsContext();
         }
 
