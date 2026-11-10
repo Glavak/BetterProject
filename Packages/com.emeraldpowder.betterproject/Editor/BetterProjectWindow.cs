@@ -746,6 +746,13 @@ namespace BetterProject.Editor
                                     && string.IsNullOrEmpty(currentFolder)
                 ? "No folder is selected"
                 : null;
+            // A subfolder clicked in a section stays highlighted while it is the folder shown.
+            string shown = _objectIds == null && (_search == null || !_search.IsActive) && _folders == null
+                ? currentFolder
+                : null;
+            _favourites?.OnFolderShown(shown);
+            _recents?.OnFolderShown(shown);
+            _newAssets?.OnFolderShown(shown);
         }
 
         /// <summary>

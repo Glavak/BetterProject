@@ -84,6 +84,8 @@ namespace BetterProject.Editor
         // an object selected elsewhere. Kept while Unity's selection is still what this click set.
         string _selectedKey;
         int _selectedId;
+        // The highlighted row is a subfolder opened in the right panel (selects nothing): kept while it is shown there.
+        string _shownFolder;
         public event Action<ContentItem> ItemOpened;
         public event Action<bool> CollapsedChanged;
 
@@ -461,6 +463,7 @@ namespace BetterProject.Editor
             if (_selectedKey == null) return;
             _selectedKey = null;
             _selectedId = 0;
+            _shownFolder = null;
             RefreshSelection();
         }
 
@@ -468,14 +471,22 @@ namespace BetterProject.Editor
         public void OnUnitySelectionChanged()
         {
             if (_selectedKey == null || _selectedKey == HeaderKey) return; // the header selects no object
+            if (_shownFolder != null) return; // selects no object either: follows the shown folder instead
             var ids = Selection.instanceIDs;
             if (_selectedId == 0 || ids.Length != 1 || ids[0] != _selectedId) ClearSelection();
+        }
+
+        /// <summary>The right panel now shows <paramref name="folder"/> (null: not a single folder).</summary>
+        public void OnFolderShown(string folder)
+        {
+            if (_shownFolder != null && _shownFolder != folder) ClearSelection();
         }
 
         void SelectHeader()
         {
             _selectedKey = HeaderKey;
             _selectedId = 0;
+            _shownFolder = null;
             RefreshSelection();
             RowSelected?.Invoke();
         }
@@ -490,6 +501,7 @@ namespace BetterProject.Editor
             }
             _selectedKey = KeyOf(row);
             _selectedId = id;
+            _shownFolder = null;
             if (id != 0) Selection.instanceIDs = new[] { id }; // Inspector shows it; the right panel is left alone
             RefreshSelection();
             RowSelected?.Invoke();
@@ -540,10 +552,15 @@ namespace BetterProject.Editor
             DisarmDrag();
             if (ContentView.IsContextClick(evt, false)) { evt.StopPropagation(); ShowContextMenu(row); return; }
             if (evt.button != 0 || !pressedHere) return;
-            // A folder inside an expanded folder entry opens in the right panel; nothing gets selected.
+            // A folder inside an expanded folder entry opens in the right panel and is highlighted while shown there;
+            // Unity's selection is left alone.
             if (row.IsFolder && !row.Entry.HasValue)
             {
-                ClearSelection();
+                _selectedKey = KeyOf(row);
+                _selectedId = 0;
+                _shownFolder = row.Path;
+                RefreshSelection();
+                RowSelected?.Invoke();
                 FolderOpened?.Invoke(row.Path);
             }
             else SelectRow(row);
