@@ -88,7 +88,7 @@ namespace BetterProject.Editor
 
             var selection = Block(root, "Selection");
             Option(selection, "Don't select folders in right pane",
-                "Clicking a folder in the right panel doesn't select it (the Inspector keeps its object), not even on double click; double click still opens it.",
+                "Clicking a folder in the right panel highlights it but doesn't select it in Unity (the Inspector keeps its object), like folders in the left panel.",
                 s.DontSelectFoldersInRightPane, v => s.DontSelectFoldersInRightPane = v);
             var delete = Option(selection, "Delete without confirmation",
                 "The Delete key in Better Project moves the selected assets to the trash without asking first. " +

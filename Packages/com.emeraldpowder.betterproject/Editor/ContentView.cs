@@ -141,6 +141,7 @@ namespace BetterProject.Editor
         const float DragThreshold = 5f;
         static readonly Color DropColor = ItemDrag.DropColor;
         int _collapseId;            // plainly pressed item: select it (only it) on pointer-up unless a drag starts
+        int[] _pushedIds;           // Unity's selection as this view last left it (may lack folders highlighted here)
         int _dropIndex = -1;        // item index of the highlighted drop cell
         int _dragIndex = -1;
         int _dragPointer = -1;
@@ -300,7 +301,12 @@ namespace BetterProject.Editor
         public void SyncFromUnitySelection()
         {
             var ids = UnityEditor.Selection.instanceIDs;
-            Selection.Set(ids);
+            // Still the selection this view left: keep folders highlighted here only ("Don't select folders in right pane").
+            if (_pushedIds == null || !SameIds(ids, _pushedIds))
+            {
+                Selection.Set(ids);
+                _pushedIds = null;
+            }
             if (_cursorId != 0 && !ContainsId(_cursorId)) _cursorId = 0;
             if (ids.Length > 0 && ids.Length <= 256)
             {
@@ -614,8 +620,7 @@ namespace BetterProject.Editor
                 foreach (var it in _items) if (it.InstanceId != 0) visibleIds.Add(it.InstanceId);
                 int before = Selection.Selected.Count;
                 Selection.Retain(visibleIds);
-                if (Selection.Selected.Count != before)
-                    UnityEditor.Selection.instanceIDs = new List<int>(Selection.Selected).ToArray();
+                if (Selection.Selected.Count != before) PushSelection(false);
             }
             else
             {
@@ -775,10 +780,6 @@ namespace BetterProject.Editor
             int id = ResolveId(index);
             if (id == 0) return;
             ArmDrag(row, index, evt);
-            // "Don't select folders in right pane": a folder can be dragged and double-click opened, never selected.
-            if (_items[index].IsFolder && !_items[index].IsSubAsset && BetterProjectSettings.instance.DontSelectFoldersInRightPane)
-                return;
-
             // Slow click: plain click on the single selected item, not the click that selected it, not a double click,
             // and not the click that brings focus back to the list / window (e.g. after editing in the Inspector).
             string path = _items[index].Path;
@@ -943,8 +944,38 @@ namespace BetterProject.Editor
             }
             Selection.Click(id, toggle, range, order);
             _cursorId = id;
-            UnityEditor.Selection.instanceIDs = new List<int>(Selection.Selected).ToArray();
+            PushSelection(false);
             RefreshAll();
+        }
+
+        // Pushes this view's selection to Unity's. "Don't select folders in right pane": folders stay highlighted here
+        // only, Unity gets the rest (and keeps its selection, so the Inspector its object, when only folders are
+        // selected), like folders in the left panel. Context menu commands act on Unity's selection: withFolders.
+        void PushSelection(bool withFolders)
+        {
+            var ids = new List<int>(Selection.Selected);
+            if (!withFolders && BetterProjectSettings.instance.DontSelectFoldersInRightPane)
+            {
+                var folders = new HashSet<int>();
+                foreach (var it in _items) if (it.IsFolder && !it.IsSubAsset && it.InstanceId != 0) folders.Add(it.InstanceId);
+                int before = ids.Count;
+                ids.RemoveAll(folders.Contains);
+                if (ids.Count == 0 && before > 0)
+                {
+                    _pushedIds = UnityEditor.Selection.instanceIDs;
+                    return;
+                }
+            }
+            _pushedIds = ids.ToArray();
+            UnityEditor.Selection.instanceIDs = _pushedIds;
+        }
+
+        static bool SameIds(int[] a, int[] b)
+        {
+            if (a.Length != b.Length) return false;
+            var set = new HashSet<int>(a);
+            foreach (int id in b) if (!set.Contains(id)) return false;
+            return true;
         }
 
         // Left click on empty space (below the rows, right of the last grid cell) clears the selection.
@@ -1006,7 +1037,7 @@ namespace BetterProject.Editor
             else if (!ContainsId(id))
             {
                 Selection.Click(id, false, false, null);
-                UnityEditor.Selection.instanceIDs = new[] { id };
+                PushSelection(true);
                 RefreshAll();
             }
             else
@@ -1015,10 +1046,10 @@ namespace BetterProject.Editor
                 var visible = new List<int>();
                 var ids = new HashSet<int>(Selection.Selected);
                 foreach (var it in _items) if (it.InstanceId != 0 && it.Guid != null && ids.Contains(it.InstanceId)) visible.Add(it.InstanceId);
-                if (visible.Count != UnityEditor.Selection.instanceIDs.Length)
+                if (!SameIds(visible.ToArray(), UnityEditor.Selection.instanceIDs))
                 {
                     Selection.Set(visible);
-                    UnityEditor.Selection.instanceIDs = visible.ToArray();
+                    PushSelection(true);
                     RefreshAll();
                 }
             }
