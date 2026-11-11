@@ -57,6 +57,23 @@ namespace BetterProject.Core.Tests
             StringAssert.Contains("é😀", json);
             Assert.AreEqual(name, RefListJson.ReadFavourites(json).Items[0].Name);
         }
+        [Test] public void Favourites_Search_ExactFormatAndRoundTrip()
+        {
+            var l = new FavouritesList();
+            l.Add(new AssetRef(G), "A");
+            l.AddSearch("t:Scene \"x\"");
+            var json = RefListJson.WriteFavourites(l);
+            var expected = "{\n  \"version\": 1,\n  \"favourites\": [\n" +
+                "    { \"guid\": \"" + G + "\", \"localId\": \"0\", \"name\": \"A\" },\n" +
+                "    { \"search\": \"t:Scene \\\"x\\\"\" }\n  ]\n}\n";
+            Assert.AreEqual(expected, json);
+            var r = RefListJson.ReadFavourites(json);
+            Assert.AreEqual(2, r.Items.Count);
+            Assert.AreEqual("t:Scene \"x\"", r.Items[1].Query);
+            Assert.AreEqual(json, RefListJson.WriteFavourites(r));
+        }
+        [Test] public void Favourites_EmptySearch_Throws()
+            => Assert.Throws<FormatException>(() => RefListJson.ReadFavourites("{\"version\":1,\"favourites\":[{\"search\":\" \"}]}"));
         [Test] public void Favourites_WriteIsStable()
         {
             var l = new FavouritesList();

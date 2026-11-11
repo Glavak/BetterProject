@@ -247,9 +247,17 @@ namespace BetterProject.Editor
             Rename.Ended += () =>
             {
                 if (_pendingPath != null) ClearPending();
-                // Enter / Esc leave nothing focused: give keys back to the list. If focus moved elsewhere, leave it.
-                if (focusController == null || focusController.focusedElement == null) _list.Focus();
+                // Enter / Esc leave nothing focused (or the removed field): give keys back to the list, now and once
+                // the focus change settles. If focus moved elsewhere, leave it.
+                FocusListIfLost();
+                schedule.Execute(() => { if (!Rename.IsActive) FocusListIfLost(); });
             };
+        }
+
+        void FocusListIfLost()
+        {
+            var focused = focusController?.focusedElement as VisualElement;
+            if (focused == null || focused.panel == null || Rename.Contains(focused)) _list.Focus();
         }
 
         // macOS opens context menus on mouse down, Windows/Linux on mouse up (as ContextualMenuManipulator does).

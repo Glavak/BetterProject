@@ -43,36 +43,30 @@ namespace BetterProject.Editor
         /// <summary>Adds the asset / folder / sub-asset. False if not an asset, already present, or the file is unreadable.</summary>
         public static bool Add(Object o)
         {
-            ReloadIfChanged();
-            EnsureLoaded();
             if (!AssetRefUtil.TryFromObject(o, out var r)) return false;
-            if (s_LoadFailed)
-            {
-                Debug.LogWarning("[Better Project] Favourite not added: " + FilePath + " is unreadable (" + s_LoadError + "). Fix the file first.");
-                return false;
-            }
-            if (!s_List.Add(r, AssetRefUtil.NameOf(o, r))) return false;
-            Save();
-            Changed?.Invoke();
-            return true;
+            return Change("added", l => l.Add(r, AssetRefUtil.NameOf(o, r)));
         }
 
-        public static bool Contains(AssetRef r)
-        {
-            foreach (var e in List.Items) if (e.Ref.Equals(r)) return true;
-            return false;
-        }
+        /// <summary>Adds a saved search (shown as one entry; clicking it runs the query). False if empty, present, or unreadable.</summary>
+        public static bool AddSearch(string query) => Change("added", l => l.AddSearch(query));
 
-        public static bool Remove(AssetRef r)
+        public static bool Contains(AssetRef r) => List.Contains(r);
+        public static bool ContainsSearch(string query) => List.ContainsSearch(query);
+
+        public static bool Remove(AssetRef r) => Change("removed", l => l.Remove(r));
+        public static bool RemoveSearch(string query) => Change("removed", l => l.RemoveSearch(query));
+
+        /// <summary>Applies <paramref name="edit"/> to the current list and saves if it changed. Refused while the file is unreadable.</summary>
+        static bool Change(string verb, Func<FavouritesList, bool> edit)
         {
             ReloadIfChanged();
             EnsureLoaded();
             if (s_LoadFailed)
             {
-                Debug.LogWarning("[Better Project] Favourite not removed: " + FilePath + " is unreadable (" + s_LoadError + "). Fix the file first.");
+                Debug.LogWarning("[Better Project] Favourite not " + verb + ": " + FilePath + " is unreadable (" + s_LoadError + "). Fix the file first.");
                 return false;
             }
-            if (!s_List.Remove(r)) return false;
+            if (!edit(s_List)) return false;
             Save();
             Changed?.Invoke();
             return true;

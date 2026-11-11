@@ -42,6 +42,8 @@ namespace BetterProject.Editor
         ToolbarSearchField _searchField;
         Button _objectsButton;
         ToolbarButton _createButton;
+        ToolbarButton _favouriteButton;
+        StarIcon _favouriteStar;
         int[] _objectIds; // "Selected objects" results (Select Dependencies); null = not in that mode
         // Several folders selected in the tree: the right panel shows all their contents. Null = just currentFolder
         // (which is always the primary, i.e. last clicked, folder and the one breadcrumbs / Create use).
@@ -102,6 +104,8 @@ namespace BetterProject.Editor
                 // Left "Selected objects" with a query that trims to empty: no search will replace the stale
                 // object-list results, so show the folder now (SetQuery raises Cleared only when a search was active).
                 if (wasObjects && !_search.IsActive) LeaveResults();
+                UpdateFavouriteButton();
+                NotifySectionsShown();
             });
             // Esc clears the field (and leaves it when already empty). Trickle-down so the inner text field never sees it.
             _searchField.RegisterCallback<KeyDownEvent>(e =>
@@ -120,6 +124,14 @@ namespace BetterProject.Editor
             _objectsButton.style.display = DisplayStyle.None;
             toolbar.Add(_objectsButton);
             toolbar.Add(_searchField);
+            // Star: adds / removes the current folder, or the current search, as a favourite.
+            _favouriteButton = new ToolbarButton(ToggleFavourite) { name = "favourite" };
+            _favouriteButton.style.flexShrink = 0;
+            _favouriteButton.style.justifyContent = Justify.Center;
+            _favouriteButton.style.alignItems = Align.Center;
+            _favouriteStar = new StarIcon();
+            _favouriteButton.Add(_favouriteStar);
+            toolbar.Add(_favouriteButton);
             var settingsButton = new ToolbarButton(BetterProjectSettingsProvider.Open)
             {
                 name = "settings",
@@ -393,9 +405,15 @@ namespace BetterProject.Editor
             section.CollapsedChanged += c => favouritesCollapsed = c;
             section.FolderOpened += OnFolderClicked;
             section.ItemOpened += OnItemOpened;
+            section.SearchOpened += OpenSearch;
             section.FillChildContextMenu = AddOpenFolderItem;
             section.FillContextMenu = (entry, menu) =>
             {
+                if (entry.Query != null)
+                {
+                    menu.AddItem(new GUIContent("Remove from Favourites"), false, () => FavouritesStore.RemoveSearch(entry.Query));
+                    return;
+                }
                 AddOpenFolderItem(AssetRefUtil.PathOf(entry.Ref), menu);
                 menu.AddItem(new GUIContent("Remove from Favourites"), false, () => FavouritesStore.Remove(entry.Ref));
             };
@@ -409,8 +427,71 @@ namespace BetterProject.Editor
         {
             var items = FavouritesStore.List.Items;
             var result = new List<RefSectionEntry>(items.Count);
-            foreach (var e in items) result.Add(new RefSectionEntry(e.Ref, e.Name));
+            foreach (var e in items)
+                result.Add(e.IsSearch ? RefSectionEntry.Search(e.Query, e.Name) : new RefSectionEntry(e.Ref, e.Name));
             return result;
+        }
+
+        /// <summary>Puts a saved search's query in the search field and shows its results at once.</summary>
+        void OpenSearch(string query)
+        {
+            if (_searchField == null) return;
+            if (_content != null && _content.Rename.IsActive) _content.Rename.Commit();
+            _searchField.value = query; // the field's callback leaves object-list mode and sets the query
+            _search.RunNow();
+        }
+
+        /// <summary>What the star button stands for now: the search shown, or the single folder shown.</summary>
+        enum FavouriteTarget { None, Search, Folder }
+
+        FavouriteTarget CurrentFavouriteTarget(out string folderGuid)
+        {
+            folderGuid = null;
+            if (_objectIds != null) return FavouriteTarget.None;
+            if (_search != null && _search.IsActive) return FavouriteTarget.Search;
+            if (_folders != null || string.IsNullOrEmpty(currentFolder)) return FavouriteTarget.None;
+            folderGuid = AssetDatabase.AssetPathToGUID(currentFolder); // none for the "Packages" root
+            return string.IsNullOrEmpty(folderGuid) ? FavouriteTarget.None : FavouriteTarget.Folder;
+        }
+
+        void UpdateFavouriteButton()
+        {
+            if (_favouriteButton == null) return;
+            bool on = false;
+            string tip;
+            var target = CurrentFavouriteTarget(out string guid);
+            switch (target)
+            {
+                case FavouriteTarget.Search:
+                    on = FavouritesStore.ContainsSearch(_search.Query);
+                    tip = on ? "Remove this search from Favourites" : "Add this search to Favourites";
+                    break;
+                case FavouriteTarget.Folder:
+                    on = FavouritesStore.Contains(new AssetRef(guid));
+                    tip = on ? "Remove this folder from Favourites" : "Add this folder to Favourites";
+                    break;
+                default:
+                    tip = "Add the current folder or search to Favourites";
+                    break;
+            }
+            _favouriteButton.SetEnabled(target != FavouriteTarget.None);
+            _favouriteButton.tooltip = tip;
+            _favouriteStar.Filled = on;
+        }
+
+        void ToggleFavourite()
+        {
+            switch (CurrentFavouriteTarget(out string guid))
+            {
+                case FavouriteTarget.Search:
+                    if (!FavouritesStore.RemoveSearch(_search.Query)) FavouritesStore.AddSearch(_search.Query);
+                    break;
+                case FavouriteTarget.Folder:
+                    if (!FavouritesStore.Remove(new AssetRef(guid)))
+                        FavouritesStore.Add(AssetDatabase.LoadAssetAtPath<Object>(currentFolder));
+                    break;
+            }
+            UpdateFavouriteButton();
         }
 
         /// <summary>Adds every dragged asset / folder / sub-asset that is not a favourite yet. Never moves anything.</summary>
@@ -438,6 +519,7 @@ namespace BetterProject.Editor
             if (_favourites == null) return;
             UpdateFavouritesWarning(_favourites);
             _favourites.Rebuild();
+            UpdateFavouriteButton();
         }
 
         // ---- recents ----
@@ -701,6 +783,7 @@ namespace BetterProject.Editor
         void ShowCurrentFolder()
         {
             UpdateBreadcrumbs();
+            UpdateFavouriteButton();
             // Create puts the asset in the current folder (also while results are shown): only where it can be written.
             _createButton?.SetEnabled(!string.IsNullOrEmpty(currentFolder) && AssetsContextMenu.IsWritableFolder(currentFolder));
             List<ContentItem> objects = _objectIds != null ? SearchController.FromInstanceIds(_objectIds) : null;
@@ -746,13 +829,20 @@ namespace BetterProject.Editor
                                     && string.IsNullOrEmpty(currentFolder)
                 ? "No folder is selected"
                 : null;
-            // A subfolder clicked in a section stays highlighted while it is the folder shown.
-            string shown = _objectIds == null && (_search == null || !_search.IsActive) && _folders == null
-                ? currentFolder
-                : null;
-            _favourites?.OnFolderShown(shown);
-            _recents?.OnFolderShown(shown);
-            _newAssets?.OnFolderShown(shown);
+            NotifySectionsShown();
+        }
+
+        // A subfolder or saved search clicked in a section stays highlighted while it is what the right panel shows.
+        void NotifySectionsShown()
+        {
+            bool searching = _objectIds == null && _search != null && _search.IsActive;
+            string folder = _objectIds == null && !searching && _folders == null ? currentFolder : null;
+            string query = searching ? _search.Query : null;
+            foreach (var section in new[] { _favourites, _recents, _newAssets })
+            {
+                section?.OnFolderShown(folder);
+                section?.OnSearchShown(query);
+            }
         }
 
         /// <summary>
@@ -829,6 +919,7 @@ namespace BetterProject.Editor
         {
             if (_content == null) return;
             UpdateBreadcrumbs();
+            UpdateFavouriteButton();
             _content.DropFolder = null;
             _content.Show(items);
             _content.SyncFromUnitySelection();

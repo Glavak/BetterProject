@@ -9,24 +9,38 @@ using Object = UnityEngine.Object;
 
 namespace BetterProject.Editor
 {
-    /// <summary>One top-level entry of a section: a reference plus the name stored for it (shown when it is missing).</summary>
+    /// <summary>
+    /// One top-level entry of a section: a reference plus the name stored for it (shown when it is missing), or a saved
+    /// search (<see cref="Query"/> set, <see cref="Ref"/> unused).
+    /// </summary>
     public readonly struct RefSectionEntry
     {
         public readonly AssetRef Ref;
         public readonly string StoredName;
+        public readonly string Query;
 
         public RefSectionEntry(AssetRef r, string storedName)
         {
             Ref = r;
             StoredName = storedName ?? "";
+            Query = null;
         }
+
+        RefSectionEntry(string query, string name)
+        {
+            Ref = default;
+            StoredName = name ?? "";
+            Query = query;
+        }
+
+        public static RefSectionEntry Search(string query, string name) => new RefSectionEntry(query, name);
     }
 
     /// <summary>
     /// Collapsible left-panel section listing asset references (Favourites, Recents). Entries show live names; missing
     /// ones show the stored name greyed. Folder entries expand lazily to their subfolders and assets.
-    /// Click selects the asset or folder for the Inspector (the right panel is not changed) and highlights only that row;
-    /// double click opens (folders: in the right panel). Dragging works like any item.
+    /// Click selects the asset for the Inspector (the right panel is not changed) and highlights only that row; a click on
+    /// a folder opens it in the right panel instead. Double click opens. Dragging works like any item.
     /// The section is a drop target only through <see cref="HandleDrop"/>; it never moves assets.
     /// </summary>
     public class AssetRefSection : VisualElement
@@ -47,6 +61,7 @@ namespace BetterProject.Editor
         sealed class Row
         {
             public RefSectionEntry? Entry; // top-level rows only
+            public string Query; // saved search: no asset, a click runs it
             public string Path;
             public string Guid;
             public string Name;
@@ -86,7 +101,11 @@ namespace BetterProject.Editor
         int _selectedId;
         // The highlighted row is a subfolder opened in the right panel (selects nothing): kept while it is shown there.
         string _shownFolder;
+        // The highlighted row is a saved search (selects nothing): kept while its results are shown.
+        string _shownSearch;
         public event Action<ContentItem> ItemOpened;
+        /// <summary>A saved-search row was clicked: run its query.</summary>
+        public event Action<string> SearchOpened;
         public event Action<bool> CollapsedChanged;
 
         /// <summary>Adds items to the context menu of a top-level entry (right click). Null = no menu.</summary>
@@ -313,6 +332,7 @@ namespace BetterProject.Editor
 
         Row ResolveEntry(RefSectionEntry e)
         {
+            if (e.Query != null) return new Row { Entry = e, Query = e.Query, Name = e.StoredName };
             var row = new Row { Entry = e, Guid = e.Ref.Guid, Name = e.StoredName, IsSubAsset = e.Ref.IsSubAsset };
             string path = AssetRefUtil.PathOf(e.Ref);
             if (path == null) { row.Missing = true; return row; }
@@ -379,7 +399,7 @@ namespace BetterProject.Editor
             }
             else toggle.style.visibility = Visibility.Hidden; // keeps alignment, like a TreeView leaf
 
-            var label = new Label(row.Missing ? row.Name : AssetRefUtil.Label(row.Name, row.Path, row.IsFolder, row.IsSubAsset));
+            var label = new Label(row.Missing || row.Query != null ? row.Name : AssetRefUtil.Label(row.Name, row.Path, row.IsFolder, row.IsSubAsset));
             // Entries sit one level below the section header, like a root's children in the folder tree.
             var el = MakeTreeRow(row.Depth + 1, toggle, MakeContent(IconFor(row), label));
 
@@ -388,7 +408,7 @@ namespace BetterProject.Editor
                 label.style.color = MissingColor;
                 el.tooltip = "Missing: " + row.Guid;
             }
-            else el.tooltip = row.Path;
+            else el.tooltip = row.Query != null ? "Search: " + row.Query : row.Path;
 
             el.RegisterCallback<PointerDownEvent>(e => OnRowPointerDown(row, e));
             el.RegisterCallback<PointerUpEvent>(e => OnRowPointerUp(row, e));
@@ -425,6 +445,7 @@ namespace BetterProject.Editor
         static Texture IconFor(Row row)
         {
             if (row.Missing) return null;
+            if (row.Query != null) return EditorGUIUtility.IconContent("Search Icon").image;
             if (row.IsSubAsset)
             {
                 var obj = EditorUtility.InstanceIDToObject(row.InstanceId);
@@ -442,7 +463,7 @@ namespace BetterProject.Editor
         }
 
         // Identifies a row across rebuilds; the same asset can appear twice (top level and inside a folder entry).
-        static string KeyOf(Row r) => r.Depth + "|" + (r.Path ?? r.Guid) + "|" + (r.IsSubAsset ? r.InstanceId : 0);
+        static string KeyOf(Row r) => r.Depth + "|" + (r.Path ?? r.Guid ?? "?" + r.Query) + "|" + (r.IsSubAsset ? r.InstanceId : 0);
 
         /// <summary>Highlights the row clicked in this section, if any.</summary>
         public void RefreshSelection()
@@ -464,6 +485,7 @@ namespace BetterProject.Editor
             _selectedKey = null;
             _selectedId = 0;
             _shownFolder = null;
+            _shownSearch = null;
             RefreshSelection();
         }
 
@@ -471,7 +493,7 @@ namespace BetterProject.Editor
         public void OnUnitySelectionChanged()
         {
             if (_selectedKey == null || _selectedKey == HeaderKey) return; // the header selects no object
-            if (_shownFolder != null) return; // selects no object either: follows the shown folder instead
+            if (_shownFolder != null || _shownSearch != null) return; // selects no object either: follows what is shown
             var ids = Selection.instanceIDs;
             if (_selectedId == 0 || ids.Length != 1 || ids[0] != _selectedId) ClearSelection();
         }
@@ -482,11 +504,18 @@ namespace BetterProject.Editor
             if (_shownFolder != null && _shownFolder != folder) ClearSelection();
         }
 
+        /// <summary>The right panel now shows the results of <paramref name="query"/> (null: no search).</summary>
+        public void OnSearchShown(string query)
+        {
+            if (_shownSearch != null && _shownSearch != query) ClearSelection();
+        }
+
         void SelectHeader()
         {
             _selectedKey = HeaderKey;
             _selectedId = 0;
             _shownFolder = null;
+            _shownSearch = null;
             RefreshSelection();
             RowSelected?.Invoke();
         }
@@ -502,6 +531,7 @@ namespace BetterProject.Editor
             _selectedKey = KeyOf(row);
             _selectedId = id;
             _shownFolder = null;
+            _shownSearch = null;
             if (id != 0) Selection.instanceIDs = new[] { id }; // Inspector shows it; the right panel is left alone
             RefreshSelection();
             RowSelected?.Invoke();
@@ -527,6 +557,18 @@ namespace BetterProject.Editor
             if (evt.button != 0) { if (evt.button == 1) evt.StopPropagation(); return; }
             evt.StopPropagation();
             if (row.Missing) return;
+            if (row.Query != null)
+            {
+                // Selects nothing (no asset): the click runs the search in the right panel, highlighted while shown.
+                _selectedKey = KeyOf(row);
+                _selectedId = 0;
+                _shownFolder = null;
+                _shownSearch = row.Query;
+                RefreshSelection();
+                RowSelected?.Invoke();
+                SearchOpened?.Invoke(row.Query);
+                return;
+            }
 
             if (evt.clickCount >= 2)
             {
@@ -535,9 +577,9 @@ namespace BetterProject.Editor
                 return;
             }
 
-            // Single click, folder or asset: select it (Inspector), keep the right panel as it is (a folder inside a
-            // folder entry: open it there instead). Done on release, and only if no drag started, so dragging into an
-            // Inspector field keeps the Inspector showing its object.
+            // Single click: an asset is selected (Inspector), the right panel is kept as it is; a folder opens there
+            // instead. Done on release, and only if no drag started, so dragging into an Inspector field keeps the
+            // Inspector showing its object.
 
             _dragRow = row;
             _dragElement = row.Element;
@@ -552,13 +594,13 @@ namespace BetterProject.Editor
             DisarmDrag();
             if (ContentView.IsContextClick(evt, false)) { evt.StopPropagation(); ShowContextMenu(row); return; }
             if (evt.button != 0 || !pressedHere) return;
-            // A folder inside an expanded folder entry opens in the right panel and is highlighted while shown there;
-            // Unity's selection is left alone.
-            if (row.IsFolder && !row.Entry.HasValue)
+            // A folder opens in the right panel and is highlighted while shown there; Unity's selection is left alone.
+            if (row.IsFolder)
             {
                 _selectedKey = KeyOf(row);
                 _selectedId = 0;
                 _shownFolder = row.Path;
+                _shownSearch = null;
                 RefreshSelection();
                 RowSelected?.Invoke();
                 FolderOpened?.Invoke(row.Path);

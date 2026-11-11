@@ -22,9 +22,17 @@ namespace BetterProject.Core
             {
                 var e = list.Items[i];
                 sb.Append("    { ");
-                AppendRef(sb, e.Ref);
-                sb.Append(", \"name\": ");
-                AppendString(sb, e.Name);
+                if (e.IsSearch)
+                {
+                    sb.Append("\"search\": ");
+                    AppendString(sb, e.Query);
+                }
+                else
+                {
+                    AppendRef(sb, e.Ref);
+                    sb.Append(", \"name\": ");
+                    AppendString(sb, e.Name);
+                }
                 sb.Append(" }");
                 sb.Append(i < list.Items.Count - 1 ? ",\n" : "\n");
             }
@@ -51,6 +59,12 @@ namespace BetterProject.Core
             var result = new FavouritesList();
             foreach (var o in ReadEntries(json, "favourites"))
             {
+                if (o.TryGetValue("search", out var q))
+                {
+                    if (!(q is string qs) || qs.Trim().Length == 0) throw new FormatException("'search' must be a non-empty string.");
+                    result.AddSearch(qs); // duplicates: first wins
+                    continue;
+                }
                 var r = ParseRef(o);
                 string name = "";
                 if (o.TryGetValue("name", out var n))

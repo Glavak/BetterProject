@@ -22,6 +22,7 @@ namespace BetterProject.Editor
         Action<string> _onCommit;
         Action _onCancel;
         bool _ending;
+        int _session; // bumped on every Begin: callbacks scheduled for an earlier edit must not touch a newer one
         bool _selectAllOnAttach;
         string _extension; // shown after the name in the field; null when extensions are hidden
         VisualElement _hiddenLabel;
@@ -61,6 +62,9 @@ namespace BetterProject.Editor
         public void Begin(ContentItem item, VisualElement row, Action<string> onCommit, Action onCancel)
         {
             if (IsActive) Commit(); // starting another edit = focus moved away
+            _session++;
+            _field.RemoveFromHierarchy(); // the previous edit's field may still wait for its removal
+            _field.style.display = DisplayStyle.Flex;
             _item = item;
             _onCommit = onCommit;
             _onCancel = onCancel;
@@ -88,6 +92,7 @@ namespace BetterProject.Editor
             bool hosted = IsHostedIn(row);
             if (hosted && !selectAll) return;
             _selectAllOnAttach = false;
+            int session = _session;
             if (!hosted)
             {
                 RestoreLabel();
@@ -104,7 +109,7 @@ namespace BetterProject.Editor
             }
             _field.schedule.Execute(() =>
             {
-                if (!IsActive || _field.panel == null) return;
+                if (!IsActive || session != _session || _field.panel == null) return;
                 _field.Focus();
                 if (!selectAll) return;
                 if (_extension == null) _field.SelectAll();
@@ -119,6 +124,9 @@ namespace BetterProject.Editor
             RestoreLabel();
             _field.RemoveFromHierarchy();
         }
+
+        // The field, or the text input it delegates focus to, has keyboard focus.
+        bool HasFocus() => _field.focusController?.focusedElement is VisualElement f && Contains(f);
 
         bool IsHostedIn(VisualElement row) => _field.parent != null && (_field.parent == row || row.Contains(_field));
 
@@ -147,11 +155,13 @@ namespace BetterProject.Editor
         {
             if (!IsActive) return;
             // Decide next frame: re-hosting the field (row rebinding) also blurs it, and a detached field is not "focus out".
-            // Real focus loss commits, like Unity's RenameOverlay.
+            // Real focus loss commits, like Unity's RenameOverlay. Only for this edit: the field removed by Esc / Enter
+            // also blurs, and a new edit started before this runs (F2 right after Esc) must not be committed by it.
+            int session = _session;
             _field.schedule.Execute(() =>
             {
-                if (!IsActive || _field.panel == null) return;
-                if (_field.focusController != null && _field.focusController.focusedElement == _field) return;
+                if (!IsActive || session != _session || _field.panel == null) return;
+                if (HasFocus()) return;
                 Commit();
             });
         }
@@ -169,7 +179,14 @@ namespace BetterProject.Editor
             _onCommit = null;
             _onCancel = null;
             RestoreLabel();
-            _field.RemoveFromHierarchy();
+            // Blurred while still in the panel, removed on the next tick: a field removed while focused (inside its own
+            // key event) leaves the editor swallowing keys before they reach the panel, so Enter / arrows do nothing in
+            // the window until the next click.
+            if (HasFocus()) ((Focusable)_field.focusController.focusedElement).Blur();
+            _field.style.display = DisplayStyle.None;
+            int ended = _session;
+            if (_field.panel != null) _field.schedule.Execute(() => { if (_session == ended) _field.RemoveFromHierarchy(); });
+            else _field.RemoveFromHierarchy();
             Action run = () =>
             {
                 try

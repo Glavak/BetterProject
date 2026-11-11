@@ -44,5 +44,43 @@ namespace BetterProject.Core.Tests
             var l = new FavouritesList();
             Assert.IsFalse(l.Remove(new AssetRef(G1)));
         }
+
+        [Test] public void AddSearch_TrimsAndRejectsDuplicateOrEmpty()
+        {
+            var l = new FavouritesList();
+            Assert.IsTrue(l.AddSearch("  t:Scene "));
+            Assert.IsFalse(l.AddSearch("t:Scene"));
+            Assert.IsFalse(l.AddSearch("   "));
+            Assert.AreEqual(1, l.Items.Count);
+            Assert.IsTrue(l.Items[0].IsSearch);
+            Assert.AreEqual("t:Scene", l.Items[0].Query);
+            Assert.AreEqual("All Scenes", l.Items[0].Name);
+            Assert.IsTrue(l.ContainsSearch(" t:Scene"));
+        }
+        [Test] public void Search_And_Ref_DoNotCollide()
+        {
+            var l = new FavouritesList();
+            l.AddSearch("player");
+            Assert.IsFalse(l.Contains(default));
+            Assert.IsTrue(l.Add(new AssetRef(G1), "A"));
+            Assert.IsFalse(l.RemoveSearch("other"));
+            Assert.IsTrue(l.RemoveSearch("player"));
+            Assert.AreEqual(1, l.Items.Count);
+            Assert.IsFalse(l.Items[0].IsSearch);
+        }
+        [TestCase("t:Scene", "All Scenes")]
+        [TestCase("t:prefab", "All Prefabs")]
+        [TestCase("T: Material", "All Materials")]
+        [TestCase("t:Mesh", "All Meshes")]
+        [TestCase("t:Font", "All Fonts")]
+        [TestCase("t:AnimatorController", "All AnimatorControllers")]
+        [TestCase("t:Body", "All Bodies")]
+        [TestCase("t:Ray", "All Rays")]
+        [TestCase("t:UnityEngine.TextAsset", "All TextAssets")]
+        [TestCase("t:Scene player", "t:Scene player")]
+        [TestCase("player", "player")]
+        [TestCase("t:", "t:")]
+        [TestCase("l:Art", "l:Art")]
+        public void SearchName(string query, string expected) => Assert.AreEqual(expected, FavouriteEntry.SearchName(query));
     }
 }
