@@ -26,6 +26,9 @@ namespace BetterProject.Editor
         bool _selectAllOnAttach;
         string _extension; // shown after the name in the field; null when extensions are hidden
         VisualElement _hiddenLabel;
+        // The part of the field holding keyboard focus (its text input), tracked from focus events: inside a ListView,
+        // focusController.focusedElement reports the ListView instead.
+        Focusable _focusedPart;
 
         public bool IsActive { get; private set; }
         /// <summary>Path of the item being renamed (null when inactive).</summary>
@@ -43,6 +46,8 @@ namespace BetterProject.Editor
             _field.style.marginBottom = 0;
             _field.style.height = 16;
             _field.RegisterCallback<KeyDownEvent>(OnKeyDown, TrickleDown.TrickleDown);
+            _field.RegisterCallback<FocusInEvent>(e => _focusedPart = e.target as Focusable, TrickleDown.TrickleDown);
+            _field.RegisterCallback<FocusOutEvent>(e => { if (e.target == _focusedPart) _focusedPart = null; }, TrickleDown.TrickleDown);
             _field.RegisterCallback<FocusOutEvent>(OnFocusOut);
         }
 
@@ -126,7 +131,7 @@ namespace BetterProject.Editor
         }
 
         // The field, or the text input it delegates focus to, has keyboard focus.
-        bool HasFocus() => _field.focusController?.focusedElement is VisualElement f && Contains(f);
+        bool HasFocus() => _focusedPart != null;
 
         bool IsHostedIn(VisualElement row) => _field.parent != null && (_field.parent == row || row.Contains(_field));
 
@@ -182,7 +187,7 @@ namespace BetterProject.Editor
             // Blurred while still in the panel, removed on the next tick: a field removed while focused (inside its own
             // key event) leaves the editor swallowing keys before they reach the panel, so Enter / arrows do nothing in
             // the window until the next click.
-            if (HasFocus()) ((Focusable)_field.focusController.focusedElement).Blur();
+            _focusedPart?.Blur();
             _field.style.display = DisplayStyle.None;
             int ended = _session;
             if (_field.panel != null) _field.schedule.Execute(() => { if (_session == ended) _field.RemoveFromHierarchy(); });
